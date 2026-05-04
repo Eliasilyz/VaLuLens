@@ -1,28 +1,148 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
-    <title>ValuLens | Fundamental Stock Analyzer</title>
-    <meta name="description" content="A serious, no-nonsense fundamental stock analysis tool for value investors. Calculate intrinsic value, margin of safety, and financial health." />
+
+    <!-- ========== PRIMARY SEO ========== -->
+    <title>ValuLens | Fundamental Stock Analyzer — Intrinsic Value Calculator</title>
+    <meta name="description" content="A serious, no-nonsense fundamental stock analysis tool for value investors. Calculate intrinsic value using DCF & Graham Number, margin of safety, and financial health score." />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="googlebot" content="index, follow, max-image-preview:large" />
+    <meta name="author" content="Irvan Farael Hanafi" />
+    <meta name="keywords" content="stock analyzer, fundamental analysis, intrinsic value calculator, DCF calculator, Graham Number, margin of safety, value investing, stock valuation" />
+    <link rel="canonical" href="https://funda.farelhanafi.my.id/" />
+
+    <!-- ========== GSC VERIFICATION (sudah ada, keep) ========== -->
     <meta name="google-site-verification" content="HoZgwYJz6Z5gjLcl6I91BN6MIOZDP9jMApEHGsJidqM" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <!-- ========== SITEMAP (dideklarasikan di head) ========== -->
+    <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
+
+    <!-- ========== HREFLANG ========== -->
+    <link rel="alternate" hreflang="en" href="https://funda.farelhanafi.my.id/" />
+    <link rel="alternate" hreflang="x-default" href="https://funda.farelhanafi.my.id/" />
+
+    <!-- ========== OPEN GRAPH (semua wajib ada) ========== -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://funda.farelhanafi.my.id/" />
+    <meta property="og:title" content="ValuLens | Fundamental Stock Analyzer — Intrinsic Value Calculator" />
+    <meta property="og:description" content="A serious, no-nonsense fundamental stock analysis tool for value investors. Calculate intrinsic value using DCF & Graham Number, margin of safety, and financial health score." />
+    <meta property="og:site_name" content="ValuLens" />
+    <meta property="og:locale" content="en_US" />
+    <!--
+      WAJIB DIBUAT: Buat gambar OG 1200×630px (screenshot app / banner)
+      lalu upload ke /og-image.png dan hapus komentar ini.
+      Tanpa og:image, Google & Twitter tidak akan menampilkan preview.
+    -->
+    <meta property="og:image" content="https://funda.farelhanafi.my.id/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="ValuLens — Fundamental Stock Analyzer for Value Investors" />
+
+    <!-- ========== TWITTER CARD ========== -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@faraelh_" />
+    <meta name="twitter:creator" content="@faraelh_" />
+    <meta name="twitter:title" content="ValuLens | Fundamental Stock Analyzer" />
+    <meta name="twitter:description" content="Calculate intrinsic value, DCF, Graham Number, and margin of safety. Built for serious value investors." />
+    <meta name="twitter:image" content="https://funda.farelhanafi.my.id/og-image.png" />
+    <meta name="twitter:image:alt" content="ValuLens — Fundamental Stock Analyzer" />
+
+    <!-- ========== STRUCTURED DATA (diperlengkap) ========== -->
     <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@type": "WebApplication",
-        "name": "ValuLens",
-        "description": "Fundamental stock analysis and intrinsic value calculator for value investors.",
-        "applicationCategory": "FinanceApplication",
-        "operatingSystem": "Web"
-      }
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebApplication",
+          "@id": "https://funda.farelhanafi.my.id/#app",
+          "name": "ValuLens",
+          "url": "https://funda.farelhanafi.my.id/",
+          "description": "Fundamental stock analysis and intrinsic value calculator for value investors. Features DCF analysis, Graham Number, margin of safety, and financial health scoring.",
+          "applicationCategory": "FinanceApplication",
+          "operatingSystem": "Web",
+          "browserRequirements": "Requires JavaScript",
+          "inLanguage": "en",
+          "isAccessibleForFree": true,
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          },
+          "featureList": [
+            "DCF (Discounted Cash Flow) Calculator",
+            "Graham Number Calculator",
+            "Margin of Safety Analysis",
+            "Financial Health Scoring",
+            "Intrinsic Value Estimation"
+          ],
+          "author": {
+            "@type": "Person",
+            "@id": "https://farelhanafi.my.id/#person",
+            "name": "Irvan Farael Hanafi",
+            "url": "https://farelhanafi.my.id/",
+            "sameAs": [
+              "https://github.com/Eliasilyz",
+              "https://www.linkedin.com/in/farel-hanafi/"
+            ]
+          },
+          "publisher": {
+            "@id": "https://farelhanafi.my.id/#person"
+          },
+          "mainEntityOfPage": {
+            "@type": "WebPage",
+            "@id": "https://funda.farelhanafi.my.id/"
+          }
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://funda.farelhanafi.my.id/#website",
+          "url": "https://funda.farelhanafi.my.id/",
+          "name": "ValuLens",
+          "description": "Fundamental Stock Analyzer for Value Investors",
+          "publisher": {
+            "@id": "https://farelhanafi.my.id/#person"
+          }
+        }
+      ]
+    }
     </script>
+
+    <!-- ========== FAVICON & FONTS ========== -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
   </head>
   <body class="bg-background text-foreground antialiased selection:bg-primary/30">
     <div id="root"></div>
+
+    <!--
+      PERBAIKAN KRITIS UNTUK SPA:
+      Tag <noscript> ini memberikan konten statis ke crawler Google
+      saat JavaScript belum dirender. Tanpa ini, Googlebot melihat
+      halaman kosong di crawl wave pertama.
+    -->
+    <noscript>
+      <div style="max-width:800px;margin:2rem auto;padding:1rem;font-family:sans-serif;">
+        <h1>ValuLens — Fundamental Stock Analyzer</h1>
+        <p>
+          ValuLens is a free, web-based fundamental stock analysis tool designed for serious value investors.
+          Calculate intrinsic value using Discounted Cash Flow (DCF) analysis and the Graham Number,
+          evaluate margin of safety, and assess financial health — all in one place.
+        </p>
+        <h2>Features</h2>
+        <ul>
+          <li>DCF (Discounted Cash Flow) intrinsic value calculator</li>
+          <li>Graham Number valuation</li>
+          <li>Margin of Safety analysis</li>
+          <li>Financial health scoring</li>
+        </ul>
+        <p>Built by <a href="https://farelhanafi.my.id/">Irvan Farael Hanafi</a>. Please enable JavaScript to use this application.</p>
+      </div>
+    </noscript>
+
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
