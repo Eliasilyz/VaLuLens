@@ -1,0 +1,27 @@
+name: Auto Update Repo
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  auto-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Update Timestamp
+        run: |
+          echo "Last sync: $(date)" > update_log.txt
+          
+      - name: Commit and Push
+        run: |
+          # Mengatur nama bot di log git
+          git config --global user.name "Eliaszn AI"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add update_log.txt
+          git commit -m "Auto Update by Eliaszn AI" || exit 0
+          git push
