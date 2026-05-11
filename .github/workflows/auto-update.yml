@@ -18,9 +18,8 @@ jobs:
           
       - name: Commit and Push
         run: |
-          # Mengatur nama bot di log git
           git config --global user.name "Eliaszn AI"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.email "farellh12@gmail.com"
           
           git add update_log.txt
           git commit -m "Auto Update by Eliaszn AI" || exit 0
