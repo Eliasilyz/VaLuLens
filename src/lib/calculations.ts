@@ -73,12 +73,14 @@ function buildPriceZone(fairValue: number | null, price: number): PriceZone | nu
 function buildCondition(
   input: StockInput,
   result: {
+    isBank: boolean;
     status: string;
     statusML: string;
     marginOfSafety: number | null;
     marginOfSafetyML: number | null;
     epsCagr: number | null;
     epsGrowthTrend: string;
+    growthSource: "cagr" | "roe" | "none";
     financialScore: number;
     per: number | null;
     pbv: number | null;
@@ -90,29 +92,30 @@ function buildCondition(
 ): StockCondition {
   const risks: string[] = [];
   const positives: string[] = [];
-  const isBank = input.ticker?.endsWith(".JK") || result.der > 3;
+  const { isBank } = result;
 
   // Analyze positives
   if (result.checklist.roeHigh) positives.push(`ROE ${result.roe.toFixed(1)}% — di atas 15%, modal efficient`);
-  if (result.checklist.derLow) positives.push(`D/E ${result.der.toFixed(2)} — rendah, utang terkendali`);
+  if (!isBank && result.checklist.derLow) positives.push(`D/E ${result.der.toFixed(2)} — rendah, utang terkendali`);
+  if (isBank) positives.push("Bank — D/E tidak relevan, fokus pada kualitas aset");
   if (result.checklist.epsPositive) positives.push("EPS positif — perusahaan untung");
-  if (result.checklist.growthPositive) positives.push("EPS growth positif — tren naik");
+  if (result.checklist.growthPositive) positives.push("EPS growth meningkat — tren naik");
   if (result.checklist.pbvLow) positives.push(`P/B ${result.pbv?.toFixed(1)} — di bawah 3, murah relatif terhadap book value`);
-  if (result.checklist.perLow) positives.push(`P/E ${result.per?.toFixed(1)} — di bawah 15, murah relatif terhadap earnings`);
+  if (result.checklist.perLow) positives.push(`P/E ${result.per?.toFixed(1)} — di bawah ${isBank ? 12 : 15}, murah relatif terhadap earnings`);
   if (result.dividendYield >= 4) positives.push(`Dividend yield ${result.dividendYield.toFixed(1)}% — passive income bagus`);
   if (result.epsGrowthTrend === "Increasing") positives.push("Trend EPS meningkat konsisten");
+  if (result.epsCagr !== null && result.epsCagr > 0.05) positives.push(`EPS CAGR ${(result.epsCagr * 100).toFixed(1)}% — pertumbuhan kuat`);
 
   // Analyze risks
   if (!result.checklist.roeHigh) risks.push(`ROE ${result.roe.toFixed(1)}% — di bawah 15%, kurang efficient`);
-  if (!result.checklist.derLow && !isBank) risks.push(`D/E ${result.der.toFixed(2)} — tinggi, utang besar`);
-  if (isBank && result.der > 10) risks.push(`D/E ${result.der.toFixed(2)} — normal untuk bank, tapi monitor`);
-
+  if (!isBank && !result.checklist.derLow) risks.push(`D/E ${result.der.toFixed(2)} — tinggi, utang besar`);
   if (!result.checklist.epsPositive) risks.push("EPS negatif — perusahaan rugi");
   if (result.epsGrowthTrend === "Declining") risks.push("EPS growth menurun — tren negatif");
   if (result.per !== null && result.per > 25) risks.push(`P/E ${result.per.toFixed(1)} — terlalu mahal`);
   if (result.pbv !== null && result.pbv > 5) risks.push(`P/B ${result.pbv?.toFixed(1)} — overvalued relatif terhadap book value`);
   if (result.dividendYield < 1 && result.dividendYield > 0) risks.push(`Dividend yield ${result.dividendYield.toFixed(1)}% — sangat rendah`);
   if (input.epsHistory.length < 4) risks.push("Data EPS kurang dari 4 tahun — prediksi kurang akurat");
+  if (result.growthSource === "roe") risks.push("Growth diestimasi dari ROE (EPS history tidak cukup) — hasil bisa kurang akurat");
 
   // Verdict
   let verdict: StockCondition["verdict"] = "Hold";
@@ -142,18 +145,28 @@ function buildCondition(
   // Sector note
   let sectorNote = "";
   if (isBank) {
-    sectorNote = "Bank: D/E tinggi adalah norma. Fokus pada ROE, NPL, dan pertumbuhan kredit.";
-  } else if (input.ticker?.includes("ASII") || input.ticker?.includes("AUTO")) {
-    sectorNote = "Otomotif: Siklusial — monitor permintaan konsumen dan nilai tukar.";
+    sectorNote = "Bank: D/E tinggi adalah norma (simpanan nasabah = liabilitas). Fokus pada ROE, NPL, pertumbuhan kredit, dan net interest margin.";
   } else if (input.ticker?.includes("TLKM")) {
-    sectorNote = "Telekom: Stabil tapi growth terbatas. Monitor subscriber dan ARPU.";
+    sectorNote = "Telekom: Stabil tapi growth terbatas. Monitor subscriber growth dan ARPU.";
   }
 
   return { verdict, verdictID, risks, positives, sectorNote };
 }
 
+function isBankStock(ticker?: string): boolean {
+  if (!ticker) return false;
+  const t = ticker.toUpperCase().replace(".JK", "");
+  const bankTickers = [
+    "BBCA", "BBRI", "BMRI", "BBNI", "BTPS", "BGTG", "BDMN",
+    "NISP", "MEGA", "ARTO", "BBYB", "BANK", "BINA", "PNBN",
+    "SMMA", "BBSS", "BTPX",
+  ];
+  return bankTickers.some((b) => t.startsWith(b));
+}
+
 export function calculateAnalysis(input: StockInput, mlGrowthRate?: number | null): CalculationResult {
   const { price, eps, epsHistory, bvps, der, roe, dividend } = input;
+  const isBank = isBankStock(input.ticker);
 
   // PER
   const per = eps > 0 ? price / eps : null;
@@ -200,16 +213,20 @@ export function calculateAnalysis(input: StockInput, mlGrowthRate?: number | nul
 
   // Growth rate for DCF
   let g = 0;
+  let growthSource: "cagr" | "roe" | "none" = "none";
   if (epsCagr !== null && isFinite(epsCagr) && !isNaN(epsCagr) && epsCagr > 0) {
     g = epsCagr;
+    growthSource = "cagr";
   } else if (roe > 0) {
-    g = (roe / 100) * 0.25;
+    // For banks, ROE is a better proxy for sustainable growth
+    g = isBank ? (roe / 100) * 0.30 : (roe / 100) * 0.25;
+    growthSource = "roe";
   }
   g = Math.min(g, 0.10);
 
   // DCF
   let dcfValue: number | null = null;
-  const discountRate = 0.10;
+  const discountRate = isBank ? 0.12 : 0.10; // banks get higher discount rate
 
   if (eps > 0) {
     let sumPV = 0;
@@ -255,10 +272,11 @@ export function calculateAnalysis(input: StockInput, mlGrowthRate?: number | nul
     dcfValueML = dcfValue;
   }
 
-  // PE Band Fair Price
-  const peBandValue = eps > 0 ? eps * 15 : null;
+  // PE Band Fair Price — sector-adjusted
+  const peFair = isBank ? 12 : 15; // banks typically trade at lower P/E
+  const peBandValue = eps > 0 ? eps * peFair : null;
 
-  // Weighted Fair Value — fix: Graham uses 0.3 weight, not 0.2
+  // Weighted Fair Value
   let totalWeight = 0;
   let weightedSum = 0;
 
@@ -322,30 +340,32 @@ export function calculateAnalysis(input: StockInput, mlGrowthRate?: number | nul
     else if (marginOfSafetyML >= 10) statusML = "Fair Value";
   }
 
-  // Financial Score
+  // Financial Score — no double counting, bank-aware
   let score = 0;
+
+  // ROE component (max 40)
   if (roe > 15) score += 40;
   else if (roe >= 10) score += 25;
   else if (roe > 0) score += 10;
 
-  const isBank = input.ticker?.endsWith(".JK") || der > 3;
-  if (isBank) {
-    if (roe > 15) score += 40;
-  } else {
+  // DER component (max 40) — banks excluded, D/E meaningless for them
+  if (!isBank) {
     if (der < 1) score += 40;
+    else if (der < 2) score += 20;
   }
 
+  // Growth component (max 20)
   if (g > 0) score += 20;
   else if (g === 0) score += 10;
 
-  // Checklist
+  // Checklist — bank-aware
   const checklist = {
     roeHigh: roe > 15,
-    derLow: der >= 0 && der < 1,
+    derLow: isBank ? true : der >= 0 && der < 1, // banks always pass DER
     epsPositive: eps > 0,
-    growthPositive: g > 0,
+    growthPositive: g > 0 && growthSource === "cagr", // only if from real CAGR data
     pbvLow: pbv !== null && pbv < 3,
-    perLow: per !== null && per < 15
+    perLow: per !== null && per < peFair
   };
 
   // Price Zones
@@ -354,12 +374,14 @@ export function calculateAnalysis(input: StockInput, mlGrowthRate?: number | nul
 
   // Stock Condition
   const condition = buildCondition(input, {
+    isBank,
     status,
     statusML,
     marginOfSafety,
     marginOfSafetyML,
     epsCagr,
     epsGrowthTrend,
+    growthSource,
     financialScore: Math.min(100, Math.max(0, score)),
     per,
     pbv,

@@ -723,7 +723,7 @@ export default function Analyze() {
                         {!modelReady ? (
                           <>
                             <p className="text-xs text-muted-foreground">
-                              Train an LSTM model on historical EPS data from 25+ Indonesian stocks to predict growth rates.
+                              Train a multi-feature LSTM model on 25+ Indonesian stocks. Uses EPS, ROE, D/E, and dividend yield to predict growth rates.
                             </p>
                             <Button
                               onClick={handleTrainModel}
@@ -735,7 +735,7 @@ export default function Analyze() {
                               {isTraining ? (
                                 <>
                                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                  Training... Epoch {trainingProgress.epoch}/50
+                                  Training... Epoch {trainingProgress.epoch}/80
                                 </>
                               ) : (
                                 <>
@@ -745,7 +745,7 @@ export default function Analyze() {
                               )}
                             </Button>
                             {isTraining && (
-                              <Progress value={(trainingProgress.epoch / 50) * 100} className="h-2" />
+                              <Progress value={(trainingProgress.epoch / 80) * 100} className="h-2" />
                             )}
                           </>
                         ) : (

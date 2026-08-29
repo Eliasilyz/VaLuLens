@@ -54,12 +54,12 @@ export default async function handler(req, res) {
     if (Array.isArray(fundamentals) && fundamentals.length > 0) {
       for (let i = fundamentals.length - 1; i >= 0; i--) {
         const record = fundamentals[i];
-        const annualEPS = record?.basicEPS ?? record?.netIncomeCommonStockholders ?? 0;
-        epsHistory.push(annualEPS);
+        const annualEPS = record?.basicEPS ?? 0;
+        if (annualEPS > 0) epsHistory.push(annualEPS);
       }
     }
 
-    // Fallback: if epsHistory is empty, use current EPS repeated
+    // Fallback: if epsHistory is empty or too short, use current EPS repeated
     if (epsHistory.length < 3) {
       const fallback = eps || 0;
       epsHistory.length = 0;
