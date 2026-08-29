@@ -25,7 +25,7 @@ export default async function handler(req, res) {
         modules: ["financialData", "defaultKeyStatistics"],
       }),
       yahooFinance.fundamentalsTimeSeries(symbol, {
-        period1: "5y",
+        period1: "10y",
         module: "financials",
         type: "annual",
       }),
@@ -55,8 +55,8 @@ export default async function handler(req, res) {
     if (Array.isArray(fundamentals) && fundamentals.length > 0) {
       for (let i = fundamentals.length - 1; i >= 0; i--) {
         const record = fundamentals[i];
-        const annualEPS = record?.basicEPS ?? 0;
-        if (annualEPS > 0) epsHistory.push(annualEPS);
+        const annualEPS = record?.basicEPS;
+        if (annualEPS != null) epsHistory.push(annualEPS);
       }
     }
 
