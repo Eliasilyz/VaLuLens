@@ -14,7 +14,7 @@ export interface MLPrediction {
 }
 
 const SEQUENCE_LENGTH = 3;
-const MODEL_ID = "valulens-ml-model";
+const MODEL_URL = "indexeddb://valulens-ml-model";
 
 function normalize(values: number[]): { normalized: number[]; min: number; max: number } {
   const min = Math.min(...values);
@@ -78,6 +78,10 @@ function prepareTrainingData(stocks: TrainingStock[]): {
   const allHistories = stocks.map((s) => s.epsHistory);
   const { xs, ys } = createSequences(allHistories);
 
+  if (xs.length === 0) {
+    throw new Error("Not enough EPS data points. Each stock needs at least 4 years of EPS history.");
+  }
+
   const flatData: number[] = [];
   for (const x of xs) {
     for (const seq of x) {
@@ -113,22 +117,8 @@ export async function trainModel(
     },
   });
 
-  // Save to IndexedDB — persistent, large capacity, survives reload
-  await tf.io.withSaveHandler(async (artifacts) => {
-    const db = await openDB();
-    const tx = db.transaction("models", "readwrite");
-    await tx.store.put({
-      id: MODEL_ID,
-      modelArtifacts: {
-        modelTopology: artifacts.modelTopology,
-        weightData: artifacts.weightData,
-        weightSpecs: artifacts.weightSpecs,
-      },
-    });
-    await tx.done;
-    db.close();
-    return { modelArtifactsInfo: { dateSaved: new Date(), modelTopologyType: "JSON" } };
-  });
+  // Save to IndexedDB via built-in handler
+  await model.save(MODEL_URL);
 
   features.dispose();
   labels.dispose();
@@ -138,17 +128,7 @@ export async function trainModel(
 
 export async function loadModel(): Promise<tf.LayersModel | null> {
   try {
-    const db = await openDB();
-    const tx = db.transaction("models", "readonly");
-    const record = await tx.store.get(MODEL_ID);
-    db.close();
-
-    if (!record?.modelArtifacts) return null;
-
-    const { modelTopology, weightData, weightSpecs } = record.modelArtifacts;
-    const model = await tf.loadLayersModel(
-      tf.io.fromMemory({ modelTopology, weightData, weightSpecs })
-    );
+    const model = await tf.loadLayersModel(MODEL_URL);
 
     model.compile({
       optimizer: tf.train.adam(0.01),
@@ -213,27 +193,17 @@ export function predictEPSGrowth(
 
 export async function hasSavedModel(): Promise<boolean> {
   try {
-    const db = await openDB();
-    const tx = db.transaction("models", "readonly");
-    const record = await tx.store.get(MODEL_ID);
-    db.close();
-    return !!record?.modelArtifacts;
+    const models = await tf.io.listModels();
+    return !!models[MODEL_URL];
   } catch {
     return false;
   }
 }
 
-// IndexedDB helpers
-function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open("ValuLensML", 1);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains("models")) {
-        db.createObjectStore("models", { keyPath: "id" });
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
+export async function deleteSavedModel(): Promise<void> {
+  try {
+    await tf.io.removeModel(MODEL_URL);
+  } catch {
+    // ignore
+  }
 }
