@@ -70,25 +70,8 @@ export default async function handler(req, res) {
           if (Array.isArray(fundamentals) && fundamentals.length > 0) {
             for (let i = fundamentals.length - 1; i >= 0; i--) {
               const record = fundamentals[i];
-              const annualEPS = record?.basicEPS ?? record?.dilutedEPS ?? record?.epsOutstanding ?? record?.earningsPerShare ?? null;
+              const annualEPS = record?.basicEPS ?? record?.dilutedEPS ?? null;
               if (annualEPS != null) epsHistory.push(annualEPS);
-            }
-
-            // Fallback: try netIncome / sharesOutstanding if not enough EPS data
-            if (epsHistory.length < 5) {
-              const epsFromNetIncome = [];
-              for (let i = fundamentals.length - 1; i >= 0; i--) {
-                const record = fundamentals[i];
-                const netIncome = record?.netIncomeCommonStockholders;
-                const shares = record?.sharesOutstanding;
-                if (netIncome != null && shares != null && shares > 0) {
-                  epsFromNetIncome.push(netIncome / shares);
-                }
-              }
-              if (epsFromNetIncome.length > epsHistory.length) {
-                epsHistory.length = 0;
-                epsHistory.push(...epsFromNetIncome);
-              }
             }
           }
         } catch {

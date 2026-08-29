@@ -50,36 +50,14 @@ export default async function handler(req, res) {
     const der = Math.round((derRaw / 100) * 100) / 100; // Yahoo returns as percentage (150 -> 1.5)
 
     // EPS history from fundamentalsTimeSeries (annual income statements, oldest to newest)
+    // Yahoo Finance IDX stocks: ~5 records, oldest often has no data → max 4 years
     const epsHistory = [];
     let epsHistorySource = "real";
     if (Array.isArray(fundamentals) && fundamentals.length > 0) {
-      // Log available fields from first record for debugging
-      const sampleRecord = fundamentals[0];
-      const availableFields = sampleRecord ? Object.keys(sampleRecord).filter(k => k.toLowerCase().includes("eps") || k.toLowerCase().includes("earning")) : [];
-
       for (let i = fundamentals.length - 1; i >= 0; i--) {
         const record = fundamentals[i];
-        // Try multiple EPS field names — Yahoo Finance uses different names across years
-        const annualEPS = record?.basicEPS ?? record?.dilutedEPS ?? record?.epsOutstanding ?? record?.earningsPerShare ?? null;
+        const annualEPS = record?.basicEPS ?? record?.dilutedEPS ?? null;
         if (annualEPS != null) epsHistory.push(annualEPS);
-      }
-
-      // If we still have few years, try netIncome / sharesOutstanding as fallback
-      if (epsHistory.length < 5) {
-        const epsFromNetIncome = [];
-        for (let i = fundamentals.length - 1; i >= 0; i--) {
-          const record = fundamentals[i];
-          const netIncome = record?.netIncomeCommonStockholders;
-          const shares = record?.sharesOutstanding;
-          if (netIncome != null && shares != null && shares > 0) {
-            epsFromNetIncome.push(netIncome / shares);
-          }
-        }
-        // Use netIncome-based EPS only if it gives us more data
-        if (epsFromNetIncome.length > epsHistory.length) {
-          epsHistory.length = 0;
-          epsHistory.push(...epsFromNetIncome);
-        }
       }
     }
 
@@ -101,7 +79,6 @@ export default async function handler(req, res) {
       der,
       epsHistory,
       epsHistorySource,
-      epsYearsAvailable: Array.isArray(fundamentals) ? fundamentals.length : 0,
       currency: quote.currency ?? "IDR",
       shortName: quote.shortName ?? quote.longName ?? symbol,
     });
