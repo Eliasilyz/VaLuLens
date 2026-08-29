@@ -39,7 +39,7 @@ export default async function handler(req, res) {
         const eps = quote.epsTrailingTwelveMonths ?? 0;
 
         // Try quoteSummary separately, skip on failure
-        let bvps = 0, roe = 0, der = 0;
+        let bvps = 0, roe = 0, der = 0, dividendYield = 0;
         try {
           const summary = await fetchWithTimeout(() =>
             yahooFinance.quoteSummary(symbol, {
@@ -51,6 +51,8 @@ export default async function handler(req, res) {
           roe = Math.round(roeRaw * 100 * 100) / 100;
           const derRaw = summary.financialData?.debtToEquity ?? 0;
           der = Math.round((derRaw / 100) * 100) / 100;
+          dividendYield = summary.financialData?.dividendYield ?? 0;
+          if (dividendYield > 1) dividendYield = dividendYield / 100; // normalize to decimal
         } catch {
           // skip summary data
         }
@@ -78,7 +80,7 @@ export default async function handler(req, res) {
 
         // Only include if we got enough data
         if (epsHistory.length >= 3 && eps > 0) {
-          results.push({ ticker: symbol, price, eps, bvps, roe, der, epsHistory });
+          results.push({ ticker: symbol, price, eps, bvps, roe, der, dividendYield, epsHistory });
         }
       } catch {
         // Skip this stock entirely

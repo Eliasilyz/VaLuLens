@@ -100,7 +100,6 @@ export default function Analyze() {
       return;
     }
 
-    // Auto-append .JK for Indonesian tickers (no suffix)
     let fetchTicker = rawTicker.toUpperCase();
     if (!fetchTicker.includes(".")) {
       fetchTicker += ".JK";
@@ -119,7 +118,7 @@ export default function Analyze() {
         ? data.epsHistory
         : [data.eps || 0, data.eps || 0, data.eps || 0];
 
-      form.reset({
+      const formData = {
         ticker: data.ticker || fetchTicker,
         period: "",
         price: data.price || 0,
@@ -129,7 +128,36 @@ export default function Analyze() {
         der: data.der || 0,
         roe: data.roe || 0,
         dividend: data.dividend || 0,
-      });
+      };
+
+      form.reset(formData);
+      setTicker(data.ticker || fetchTicker);
+
+      // Auto-calculate immediately
+      const input: StockInput = {
+        ...formData,
+        epsHistory: epsHistoryValues,
+      };
+
+      // Auto-predict if model is ready
+      let mlGrowth: number | null = null;
+      if (modelReady) {
+        try {
+          const model = await loadModel();
+          if (model) {
+            const dividendYield = data.price > 0 ? ((data.dividend || 0) / data.price) * 100 : 0;
+            const prediction = predictEPSGrowth(model, epsHistoryValues, data.roe || 0, data.der || 0, dividendYield);
+            setMlPrediction(prediction);
+            mlGrowth = prediction.predictedGrowthRate;
+          }
+        } catch {
+          // ML prediction failed, continue without it
+        }
+      }
+
+      const calc = calculateAnalysis(input, mlGrowth);
+      setResult(calc);
+      setAnalyzedAt(new Date());
 
       toast({ title: "Data fetched", description: `${data.ticker || fetchTicker} — ${data.shortName || ""}` });
     } catch (err: any) {
@@ -156,6 +184,7 @@ export default function Analyze() {
         epsHistory: s.epsHistory,
         roe: s.roe,
         der: s.der,
+        dividendYield: s.dividendYield ?? 0,
       }));
 
       await trainModel(trainingData, (epoch, loss) => {
@@ -181,9 +210,25 @@ export default function Analyze() {
     const epsHistory = form.getValues("epsHistory").map(h => h.value);
     const roe = form.getValues("roe");
     const der = form.getValues("der");
+    const dividend = form.getValues("dividend");
+    const price = form.getValues("price");
+    const dividendYield = price > 0 ? (dividend / price) * 100 : 0;
 
-    const prediction = predictEPSGrowth(model, epsHistory, roe, der);
+    const prediction = predictEPSGrowth(model, epsHistory, roe, der, dividendYield);
     setMlPrediction(prediction);
+
+    // Auto-recalculate with ML prediction
+    const input: StockInput = {
+      price,
+      eps: form.getValues("eps"),
+      epsHistory,
+      bvps: form.getValues("bvps"),
+      der,
+      roe,
+      dividend,
+    };
+    const calc = calculateAnalysis(input, prediction.predictedGrowthRate);
+    setResult(calc);
 
     toast({
       title: "ML Prediction",
@@ -890,6 +935,106 @@ export default function Analyze() {
                           </div>
                         ))}
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Buy/Sell Price Zones */}
+                  {(result.priceZone || result.priceZoneML) && (
+                    <div className="mt-8 pt-6 border-t border-border/60">
+                      <h3 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-4">Harga Rekomendasi</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {result.priceZone && (
+                          <div className="bg-muted/30 rounded-lg p-4 space-y-2.5">
+                            <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Fair Value Analysis</div>
+                            <div className="space-y-1.5">
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm text-emerald-600 font-medium">Beli di bawah</span>
+                                <span className="font-mono text-sm font-semibold text-emerald-600">{formatCurrency(result.priceZone.buyBelow)}</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm">Range beli ideal</span>
+                                <span className="font-mono text-sm">{formatCurrency(result.priceZone.buyRangeLow)} — {formatCurrency(result.priceZone.buyRangeHigh)}</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm text-amber-600 font-medium">Target jual</span>
+                                <span className="font-mono text-sm font-semibold text-amber-600">{formatCurrency(result.priceZone.sellTarget)}</span>
+                              </div>
+                              <div className="flex justify-between items-center pt-1.5 border-t border-border/40">
+                                <span className="text-sm text-muted-foreground">Harga saat ini</span>
+                                <span className="font-mono text-sm font-semibold">{formatCurrency(result.priceZone.currentPrice)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {result.priceZoneML && result.mlGrowthRate !== null && (
+                          <div className="bg-primary/[0.03] rounded-lg p-4 space-y-2.5 border border-primary/10">
+                            <div className="text-[10px] font-semibold uppercase tracking-widest text-primary/70 flex items-center gap-1.5">
+                              <Brain className="w-3 h-3" /> ML-Based Prediction
+                            </div>
+                            <div className="space-y-1.5">
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm text-emerald-600 font-medium">Beli di bawah</span>
+                                <span className="font-mono text-sm font-semibold text-emerald-600">{formatCurrency(result.priceZoneML.buyBelow)}</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm">Range beli ideal</span>
+                                <span className="font-mono text-sm">{formatCurrency(result.priceZoneML.buyRangeLow)} — {formatCurrency(result.priceZoneML.buyRangeHigh)}</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm text-amber-600 font-medium">Target jual</span>
+                                <span className="font-mono text-sm font-semibold text-amber-600">{formatCurrency(result.priceZoneML.sellTarget)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Stock Condition Summary */}
+                  <div className="mt-6 pt-6 border-t border-border/60">
+                    <h3 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-4">Kondisi Saham</h3>
+                    <div className="bg-muted/30 rounded-lg p-4">
+                      <div className="flex items-center gap-3 mb-3">
+                        <Badge variant={result.condition.verdict === "Strong Buy" || result.condition.verdict === "Buy" ? "default" : result.condition.verdict === "Avoid" ? "destructive" : "secondary"} className="text-sm font-semibold px-3 py-1">
+                          {result.condition.verdict}
+                        </Badge>
+                        <span className="font-serif text-lg italic">{result.condition.verdictID}</span>
+                      </div>
+
+                      {result.condition.positives.length > 0 && (
+                        <div className="mb-3">
+                          <div className="text-[10px] font-semibold uppercase tracking-widest text-emerald-600 mb-1.5">Positif</div>
+                          <ul className="space-y-1">
+                            {result.condition.positives.map((p, i) => (
+                              <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                                {p}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {result.condition.risks.length > 0 && (
+                        <div className="mb-3">
+                          <div className="text-[10px] font-semibold uppercase tracking-widest text-destructive mb-1.5">Risiko</div>
+                          <ul className="space-y-1">
+                            {result.condition.risks.map((r, i) => (
+                              <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                                <AlertCircle className="w-3.5 h-3.5 text-destructive shrink-0 mt-0.5" />
+                                {r}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {result.condition.sectorNote && (
+                        <div className="text-xs text-muted-foreground bg-muted/50 rounded p-2.5 mt-2">
+                          <span className="font-semibold">Sektor:</span> {result.condition.sectorNote}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

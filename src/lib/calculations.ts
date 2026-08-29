@@ -11,8 +11,24 @@ export interface StockInput {
   dividend: number;
 }
 
+export interface PriceZone {
+  buyBelow: number;      // ideal buy price (fairValue - 30% MoS)
+  buyRangeLow: number;   // acceptable buy range start (fairValue - 15%)
+  buyRangeHigh: number;  // acceptable buy range end (fairValue - 5%)
+  sellTarget: number;    // take profit target (fairValue + 10%)
+  currentPrice: number;
+}
+
+export interface StockCondition {
+  verdict: "Strong Buy" | "Buy" | "Hold" | "Sell" | "Avoid";
+  verdictID: string;
+  risks: string[];
+  positives: string[];
+  sectorNote: string;
+}
+
 export interface CalculationResult {
-  per: number | null; // null represents N/A
+  per: number | null;
   pbv: number | null;
   grahamNumber: number | null;
   dividendYield: number;
@@ -30,6 +46,9 @@ export interface CalculationResult {
   statusML: "Speculative" | "Undervalued" | "Fair Value" | "Overvalued";
   financialScore: number;
   mlGrowthRate: number | null;
+  priceZone: PriceZone | null;
+  priceZoneML: PriceZone | null;
+  condition: StockCondition;
   checklist: {
     roeHigh: boolean;
     derLow: boolean;
@@ -38,6 +57,99 @@ export interface CalculationResult {
     pbvLow: boolean;
     perLow: boolean;
   };
+}
+
+function buildPriceZone(fairValue: number | null, price: number): PriceZone | null {
+  if (fairValue === null || fairValue <= 0) return null;
+  return {
+    buyBelow: Math.round(fairValue * 0.70),
+    buyRangeLow: Math.round(fairValue * 0.85),
+    buyRangeHigh: Math.round(fairValue * 0.95),
+    sellTarget: Math.round(fairValue * 1.10),
+    currentPrice: price,
+  };
+}
+
+function buildCondition(
+  input: StockInput,
+  result: {
+    status: string;
+    statusML: string;
+    marginOfSafety: number | null;
+    marginOfSafetyML: number | null;
+    epsCagr: number | null;
+    epsGrowthTrend: string;
+    financialScore: number;
+    per: number | null;
+    pbv: number | null;
+    der: number;
+    roe: number;
+    dividendYield: number;
+    checklist: { roeHigh: boolean; derLow: boolean; epsPositive: boolean; growthPositive: boolean; pbvLow: boolean; perLow: boolean };
+  }
+): StockCondition {
+  const risks: string[] = [];
+  const positives: string[] = [];
+  const isBank = input.ticker?.endsWith(".JK") || result.der > 3;
+
+  // Analyze positives
+  if (result.checklist.roeHigh) positives.push(`ROE ${result.roe.toFixed(1)}% — di atas 15%, modal efficient`);
+  if (result.checklist.derLow) positives.push(`D/E ${result.der.toFixed(2)} — rendah, utang terkendali`);
+  if (result.checklist.epsPositive) positives.push("EPS positif — perusahaan untung");
+  if (result.checklist.growthPositive) positives.push("EPS growth positif — tren naik");
+  if (result.checklist.pbvLow) positives.push(`P/B ${result.pbv?.toFixed(1)} — di bawah 3, murah relatif terhadap book value`);
+  if (result.checklist.perLow) positives.push(`P/E ${result.per?.toFixed(1)} — di bawah 15, murah relatif terhadap earnings`);
+  if (result.dividendYield >= 4) positives.push(`Dividend yield ${result.dividendYield.toFixed(1)}% — passive income bagus`);
+  if (result.epsGrowthTrend === "Increasing") positives.push("Trend EPS meningkat konsisten");
+
+  // Analyze risks
+  if (!result.checklist.roeHigh) risks.push(`ROE ${result.roe.toFixed(1)}% — di bawah 15%, kurang efficient`);
+  if (!result.checklist.derLow && !isBank) risks.push(`D/E ${result.der.toFixed(2)} — tinggi, utang besar`);
+  if (isBank && result.der > 10) risks.push(`D/E ${result.der.toFixed(2)} — normal untuk bank, tapi monitor`);
+
+  if (!result.checklist.epsPositive) risks.push("EPS negatif — perusahaan rugi");
+  if (result.epsGrowthTrend === "Declining") risks.push("EPS growth menurun — tren negatif");
+  if (result.per !== null && result.per > 25) risks.push(`P/E ${result.per.toFixed(1)} — terlalu mahal`);
+  if (result.pbv !== null && result.pbv > 5) risks.push(`P/B ${result.pbv?.toFixed(1)} — overvalued relatif terhadap book value`);
+  if (result.dividendYield < 1 && result.dividendYield > 0) risks.push(`Dividend yield ${result.dividendYield.toFixed(1)}% — sangat rendah`);
+  if (input.epsHistory.length < 4) risks.push("Data EPS kurang dari 4 tahun — prediksi kurang akurat");
+
+  // Verdict
+  let verdict: StockCondition["verdict"] = "Hold";
+  let verdictID = "Tahan";
+  const status = result.statusML !== "Speculative" ? result.statusML : result.status;
+  const mos = result.marginOfSafetyML ?? result.marginOfSafety;
+
+  if (status === "Undervalued" && result.financialScore >= 60) {
+    verdict = "Strong Buy";
+    verdictID = "Beli Kuat";
+  } else if (status === "Undervalued" || (status === "Fair Value" && mos !== null && mos >= 15)) {
+    verdict = "Buy";
+    verdictID = "Beli";
+  } else if (status === "Fair Value") {
+    verdict = "Hold";
+    verdictID = "Tahan";
+  } else if (status === "Overvalued") {
+    verdict = "Sell";
+    verdictID = "Jual";
+  }
+
+  if (!result.checklist.epsPositive) {
+    verdict = "Avoid";
+    verdictID = "Hindari";
+  }
+
+  // Sector note
+  let sectorNote = "";
+  if (isBank) {
+    sectorNote = "Bank: D/E tinggi adalah norma. Fokus pada ROE, NPL, dan pertumbuhan kredit.";
+  } else if (input.ticker?.includes("ASII") || input.ticker?.includes("AUTO")) {
+    sectorNote = "Otomotif: Siklusial — monitor permintaan konsumen dan nilai tukar.";
+  } else if (input.ticker?.includes("TLKM")) {
+    sectorNote = "Telekom: Stabil tapi growth terbatas. Monitor subscriber dan ARPU.";
+  }
+
+  return { verdict, verdictID, risks, positives, sectorNote };
 }
 
 export function calculateAnalysis(input: StockInput, mlGrowthRate?: number | null): CalculationResult {
@@ -64,7 +176,7 @@ export function calculateAnalysis(input: StockInput, mlGrowthRate?: number | nul
     const first = epsHistory[0];
     const last = epsHistory[epsHistory.length - 1];
     const years = epsHistory.length;
-    
+
     if (first > 0 && last > 0) {
       epsCagr = Math.pow(last / first, 1 / (years - 1)) - 1;
     }
@@ -91,14 +203,14 @@ export function calculateAnalysis(input: StockInput, mlGrowthRate?: number | nul
   if (epsCagr !== null && isFinite(epsCagr) && !isNaN(epsCagr) && epsCagr > 0) {
     g = epsCagr;
   } else if (roe > 0) {
-    g = (roe / 100) * 0.25; // ROE is typically percentage (e.g. 15 for 15%), convert to decimal
+    g = (roe / 100) * 0.25;
   }
-  g = Math.min(g, 0.10); // cap at 10%
+  g = Math.min(g, 0.10);
 
   // DCF
   let dcfValue: number | null = null;
   const discountRate = 0.10;
-  
+
   if (eps > 0) {
     let sumPV = 0;
     let projectedEPS = eps;
@@ -106,25 +218,23 @@ export function calculateAnalysis(input: StockInput, mlGrowthRate?: number | nul
       projectedEPS *= (1 + g);
       sumPV += projectedEPS / Math.pow(1 + discountRate, year);
     }
-    
-    // Terminal value
+
     let terminalValue = 0;
     if (g < discountRate) {
       terminalValue = (projectedEPS * (1 + g)) / (discountRate - g);
     } else {
-      // fallback gordon growth
       terminalValue = (projectedEPS * 1.03) / (discountRate - 0.03);
     }
-    
+
     sumPV += terminalValue / Math.pow(1 + discountRate, 5);
     dcfValue = sumPV;
   }
 
-  // ML-based DCF (uses predicted growth rate if available)
+  // ML-based DCF
   let dcfValueML: number | null = null;
   const mlG = (mlGrowthRate !== null && mlGrowthRate !== undefined && mlGrowthRate > 0)
-    ? Math.min(mlGrowthRate / 100, 0.10) // convert percentage to decimal, cap at 10%
-    : g; // fallback to CAGR/ROE-based growth
+    ? Math.min(mlGrowthRate / 100, 0.10)
+    : g;
 
   if (eps > 0 && mlG > 0) {
     let sumPVml = 0;
@@ -148,13 +258,13 @@ export function calculateAnalysis(input: StockInput, mlGrowthRate?: number | nul
   // PE Band Fair Price
   const peBandValue = eps > 0 ? eps * 15 : null;
 
-  // Weighted Fair Value
+  // Weighted Fair Value — fix: Graham uses 0.3 weight, not 0.2
   let totalWeight = 0;
   let weightedSum = 0;
 
   if (grahamNumber !== null) {
     totalWeight += 0.3;
-    weightedSum += grahamNumber * 0.2;
+    weightedSum += grahamNumber * 0.3;
   }
   if (dcfValue !== null) {
     totalWeight += 0.4;
@@ -167,12 +277,12 @@ export function calculateAnalysis(input: StockInput, mlGrowthRate?: number | nul
 
   const fairValue = totalWeight > 0 ? weightedSum / totalWeight : null;
 
-  // ML Fair Value (same weighting but uses ML DCF)
+  // ML Fair Value
   let mlTotalWeight = 0;
   let mlWeightedSum = 0;
   if (grahamNumber !== null) {
     mlTotalWeight += 0.3;
-    mlWeightedSum += grahamNumber * 0.2;
+    mlWeightedSum += grahamNumber * 0.3;
   }
   if (dcfValueML !== null) {
     mlTotalWeight += 0.4;
@@ -190,7 +300,6 @@ export function calculateAnalysis(input: StockInput, mlGrowthRate?: number | nul
     marginOfSafety = ((fairValue - price) / fairValue) * 100;
   }
 
-  // ML Margin of Safety
   let marginOfSafetyML: number | null = null;
   if (fairValueML !== null && fairValueML > 0) {
     marginOfSafetyML = ((fairValueML - price) / fairValueML) * 100;
@@ -205,7 +314,6 @@ export function calculateAnalysis(input: StockInput, mlGrowthRate?: number | nul
     else if (marginOfSafety >= 10) status = "Fair Value";
   }
 
-  // ML Status
   let statusML: CalculationResult["statusML"] = "Overvalued";
   if (eps <= 0) {
     statusML = "Speculative";
@@ -220,13 +328,12 @@ export function calculateAnalysis(input: StockInput, mlGrowthRate?: number | nul
   else if (roe >= 10) score += 25;
   else if (roe > 0) score += 10;
 
-  const isBank = input.ticker?.endsWith(".JK") || der > 3; 
-if (isBank) {
-  // Bank emang DER-nya tinggi, kasih skor berdasarkan ROE aja
-  if (roe > 15) score += 40;
-} else {
-  if (der < 1) score += 40;
-}
+  const isBank = input.ticker?.endsWith(".JK") || der > 3;
+  if (isBank) {
+    if (roe > 15) score += 40;
+  } else {
+    if (der < 1) score += 40;
+  }
 
   if (g > 0) score += 20;
   else if (g === 0) score += 10;
@@ -240,6 +347,27 @@ if (isBank) {
     pbvLow: pbv !== null && pbv < 3,
     perLow: per !== null && per < 15
   };
+
+  // Price Zones
+  const priceZone = buildPriceZone(fairValue, price);
+  const priceZoneML = buildPriceZone(fairValueML, price);
+
+  // Stock Condition
+  const condition = buildCondition(input, {
+    status,
+    statusML,
+    marginOfSafety,
+    marginOfSafetyML,
+    epsCagr,
+    epsGrowthTrend,
+    financialScore: Math.min(100, Math.max(0, score)),
+    per,
+    pbv,
+    der,
+    roe,
+    dividendYield,
+    checklist,
+  });
 
   return {
     per,
@@ -260,6 +388,9 @@ if (isBank) {
     statusML,
     financialScore: Math.min(100, Math.max(0, score)),
     mlGrowthRate: mlGrowthRate ?? null,
+    priceZone,
+    priceZoneML,
+    condition,
     checklist
   };
 }
