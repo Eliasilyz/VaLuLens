@@ -19,50 +19,50 @@ export default async function handler(req, res) {
   try {
     const symbol = ticker.toUpperCase();
 
-    const [quote, summary] = await Promise.all([
+    const [quote, summary, fundamentals] = await Promise.all([
       yahooFinance.quote(symbol),
       yahooFinance.quoteSummary(symbol, {
-        modules: [
-          "incomeStatementHistory",
-          "balanceSheetHistory",
-          "defaultKeyStatistics",
-          "summaryDetail",
-          "financialData",
-        ],
+        modules: ["financialData", "defaultKeyStatistics"],
+      }),
+      yahooFinance.fundamentalsTimeSeries(symbol, {
+        period1: "5y",
+        module: "income-statement",
       }),
     ]);
 
     const price = quote.regularMarketPrice ?? 0;
 
-    const incomeStatements = summary.incomeStatementHistory?.incomeStatementHistory ?? [];
-    const latestIncome = incomeStatements[0];
-    const eps = latestIncome?.basicEps ?? latestIncome?.dilutedEps ?? 0;
+    // EPS from quote (trailing 12 months)
+    const eps = quote.epsTrailingTwelveMonths ?? 0;
 
-    const sharesOutstanding =
-      summary.defaultKeyStatistics?.sharesOutstanding ??
-      summary.summaryDetail?.sharesOutstanding ??
-      0;
+    // BVPS from defaultKeyStatistics
+    const bvps = summary.defaultKeyStatistics?.bookValue ?? 0;
 
-    const dividendRate = summary.summaryDetail?.dividendRate ?? 0;
-    const dividendYieldRaw = summary.summaryDetail?.dividendYield ?? 0;
-    const dividendPerShare = dividendRate > 0 ? dividendRate : price * dividendYieldRaw;
+    // Dividend per share
+    const dividendRate = quote.dividendRate ?? quote.trailingAnnualDividendRate ?? 0;
 
-    const balanceSheets = summary.balanceSheetHistory?.balanceSheetHistory ?? [];
-    const latestBS = balanceSheets[0];
-    const totalEquity = latestBS?.totalStockholderEquity ?? 0;
-    const bvps = sharesOutstanding > 0 ? totalEquity / sharesOutstanding : 0;
+    // ROE & DER from financialData
+    const roeRaw = summary.financialData?.returnOnEquity ?? 0;
+    const roe = Math.round(roeRaw * 100 * 100) / 100; // 0.15 -> 15
 
-    const roeRaw = summary.defaultKeyStatistics?.returnOnEquity ?? 0;
-    const roe = Math.round(roeRaw * 100 * 100) / 100;
+    const derRaw = summary.financialData?.debtToEquity ?? 0;
+    const der = Math.round((derRaw / 100) * 100) / 100; // Yahoo returns as percentage (150 -> 1.5)
 
-    const derRaw = summary.defaultKeyStatistics?.debtToEquity ?? 0;
-    const der = Math.round((derRaw / 100) * 100) / 100;
-
+    // EPS history from fundamentalsTimeSeries (annual income statements, oldest to newest)
     const epsHistory = [];
-    for (let i = incomeStatements.length - 1; i >= 0; i--) {
-      const statement = incomeStatements[i];
-      const annualEPS = statement?.basicEps ?? statement?.dilutedEps ?? 0;
-      epsHistory.push(annualEPS);
+    if (Array.isArray(fundamentals) && fundamentals.length > 0) {
+      for (let i = fundamentals.length - 1; i >= 0; i--) {
+        const record = fundamentals[i];
+        const annualEPS = record?.basicEPS ?? record?.netIncomeCommonStockholders ?? 0;
+        epsHistory.push(annualEPS);
+      }
+    }
+
+    // Fallback: if epsHistory is empty, use current EPS repeated
+    if (epsHistory.length < 3) {
+      const fallback = eps || 0;
+      epsHistory.length = 0;
+      epsHistory.push(fallback, fallback, fallback);
     }
 
     return res.status(200).json({
@@ -70,7 +70,7 @@ export default async function handler(req, res) {
       price,
       eps,
       bvps,
-      dividend: Math.round(dividendPerShare * 100) / 100,
+      dividend: Math.round(dividendRate * 100) / 100,
       roe,
       der,
       epsHistory,
