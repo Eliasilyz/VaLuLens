@@ -96,60 +96,60 @@ function buildCondition(
   const { isBank } = result;
 
   // Analyze positives
-  if (result.checklist.roeHigh) positives.push(`ROE ${result.roe.toFixed(1)}% — di atas 15%, modal efficient`);
-  if (!isBank && result.checklist.derLow) positives.push(`D/E ${result.der.toFixed(2)} — rendah, utang terkendali`);
-  if (isBank) positives.push("Bank — D/E tidak relevan, fokus pada kualitas aset");
-  if (result.checklist.epsPositive) positives.push("EPS positif — perusahaan untung");
-  if (result.checklist.growthPositive) positives.push("EPS growth meningkat — tren naik");
-  if (result.checklist.pbvLow) positives.push(`P/B ${result.pbv?.toFixed(1)} — di bawah 3, murah relatif terhadap book value`);
-  if (result.checklist.perLow) positives.push(`P/E ${result.per?.toFixed(1)} — di bawah ${isBank ? 12 : 15}, murah relatif terhadap earnings`);
-  if (result.dividendYield >= 4) positives.push(`Dividend yield ${result.dividendYield.toFixed(1)}% — passive income bagus`);
-  if (result.epsGrowthTrend === "Increasing") positives.push("Trend EPS meningkat konsisten");
-  if (result.epsCagr !== null && result.epsCagr > 0.05) positives.push(`EPS CAGR ${(result.epsCagr * 100).toFixed(1)}% — pertumbuhan kuat`);
+  if (result.checklist.roeHigh) positives.push(`ROE ${result.roe.toFixed(1)}% — above 15%, capital efficient`);
+  if (!isBank && result.checklist.derLow) positives.push(`D/E ${result.der.toFixed(2)} — low, manageable debt`);
+  if (isBank) positives.push("Bank — D/E is not relevant, focus on asset quality");
+  if (result.checklist.epsPositive) positives.push("EPS positive — company is profitable");
+  if (result.checklist.growthPositive) positives.push("EPS growth trending upward");
+  if (result.checklist.pbvLow) positives.push(`P/B ${result.pbv?.toFixed(1)} — below 3, cheap relative to book value`);
+  if (result.checklist.perLow) positives.push(`P/E ${result.per?.toFixed(1)} — below ${isBank ? 12 : 15}, cheap relative to earnings`);
+  if (result.dividendYield >= 4) positives.push(`Dividend yield ${result.dividendYield.toFixed(1)}% — strong passive income`);
+  if (result.epsGrowthTrend === "Increasing") positives.push("Consistent upward EPS trend");
+  if (result.epsCagr !== null && result.epsCagr > 0.05) positives.push(`EPS CAGR ${(result.epsCagr * 100).toFixed(1)}% — strong growth`);
 
   // Analyze risks
-  if (!result.checklist.roeHigh) risks.push(`ROE ${result.roe.toFixed(1)}% — di bawah 15%, kurang efficient`);
-  if (!isBank && !result.checklist.derLow) risks.push(`D/E ${result.der.toFixed(2)} — tinggi, utang besar`);
-  if (!result.checklist.epsPositive) risks.push("EPS negatif — perusahaan rugi");
-  if (result.epsGrowthTrend === "Declining") risks.push("EPS growth menurun — tren negatif");
-  if (result.per !== null && result.per > 25) risks.push(`P/E ${result.per.toFixed(1)} — terlalu mahal`);
-  if (result.pbv !== null && result.pbv > 5) risks.push(`P/B ${result.pbv?.toFixed(1)} — overvalued relatif terhadap book value`);
-  if (result.dividendYield < 1 && result.dividendYield > 0) risks.push(`Dividend yield ${result.dividendYield.toFixed(1)}% — sangat rendah`);
-    if (input.epsHistory.length < 4) risks.push("Data EPS kurang dari 4 tahun — prediksi kurang akurat");
-    if (input.epsHistorySource === "fallback") risks.push("EPS history tidak tersedia dari API — menggunakan data fallback, pertumbuhan diestimasi dari ROE");
-    else if (result.growthSource === "roe") risks.push("Growth diestimasi dari ROE (EPS CAGR tidak positif) — hasil bisa kurang akurat");
+  if (!result.checklist.roeHigh) risks.push(`ROE ${result.roe.toFixed(1)}% — below 15%, low capital efficiency`);
+  if (!isBank && !result.checklist.derLow) risks.push(`D/E ${result.der.toFixed(2)} — high leverage, significant debt`);
+  if (!result.checklist.epsPositive) risks.push("EPS negative — company is unprofitable");
+  if (result.epsGrowthTrend === "Declining") risks.push("EPS growth declining — negative trend");
+  if (result.per !== null && result.per > 25) risks.push(`P/E ${result.per.toFixed(1)} — overvalued`);
+  if (result.pbv !== null && result.pbv > 5) risks.push(`P/B ${result.pbv?.toFixed(1)} — overvalued relative to book value`);
+  if (result.dividendYield < 1 && result.dividendYield > 0) risks.push(`Dividend yield ${result.dividendYield.toFixed(1)}% — very low`);
+  if (input.epsHistory.length < 4) risks.push("Less than 4 years of EPS data — prediction may be less accurate");
+  if (input.epsHistorySource === "fallback") risks.push("EPS history unavailable from API — using fallback data, growth estimated from ROE");
+  else if (result.growthSource === "roe") risks.push("Growth estimated from ROE (EPS CAGR not positive) — results may be less accurate");
 
   // Verdict
   let verdict: StockCondition["verdict"] = "Hold";
-  let verdictID = "Tahan";
+  let verdictID = "Hold";
   const status = result.statusML !== "Speculative" ? result.statusML : result.status;
   const mos = result.marginOfSafetyML ?? result.marginOfSafety;
 
   if (status === "Undervalued" && result.financialScore >= 60) {
     verdict = "Strong Buy";
-    verdictID = "Beli Kuat";
+    verdictID = "Strong Buy";
   } else if (status === "Undervalued" || (status === "Fair Value" && mos !== null && mos >= 15)) {
     verdict = "Buy";
-    verdictID = "Beli";
+    verdictID = "Buy";
   } else if (status === "Fair Value") {
     verdict = "Hold";
-    verdictID = "Tahan";
+    verdictID = "Hold";
   } else if (status === "Overvalued") {
     verdict = "Sell";
-    verdictID = "Jual";
+    verdictID = "Sell";
   }
 
   if (!result.checklist.epsPositive) {
     verdict = "Avoid";
-    verdictID = "Hindari";
+    verdictID = "Avoid";
   }
 
   // Sector note
   let sectorNote = "";
   if (isBank) {
-    sectorNote = "Bank: D/E tinggi adalah norma (simpanan nasabah = liabilitas). Fokus pada ROE, NPL, pertumbuhan kredit, dan net interest margin.";
+    sectorNote = "Bank: High D/E is normal (customer deposits = liabilities). Focus on ROE, NPL, loan growth, and net interest margin.";
   } else if (input.ticker?.includes("TLKM")) {
-    sectorNote = "Telekom: Stabil tapi growth terbatas. Monitor subscriber growth dan ARPU.";
+    sectorNote = "Telecom: Stable but limited growth potential. Monitor subscriber growth and ARPU.";
   }
 
   return { verdict, verdictID, risks, positives, sectorNote };

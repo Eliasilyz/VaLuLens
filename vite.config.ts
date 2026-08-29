@@ -11,11 +11,11 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: "dist", // Standar Vercel
+    outDir: "dist", // Standard Vercel output
     emptyOutDir: true,
   },
   server: {
-    port: Number(process.env.PORT) || 5173, // Pake fallback biar gak error
+    port: Number(process.env.PORT) || 5173, // Fallback to avoid errors
     watch: {
       ignored: ["**/api/**"],
     },
