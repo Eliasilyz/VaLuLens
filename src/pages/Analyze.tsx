@@ -25,6 +25,7 @@ import {
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { calculateAnalysis, type StockInput, type CalculationResult } from "@/lib/calculations";
 import { formatCurrency as formatCurrencyByTicker } from "@/lib/currency";
+import { EXCHANGES, getTickerWithSuffix } from "@/lib/exchanges";
 import { trainModel, loadModel, predictEPSGrowth, hasSavedModel, type TrainingStock, type MLPrediction } from "@/lib/ml-model";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -44,7 +45,7 @@ const EpsChart = lazy(() => import("@/components/analyzer/EpsChart"));
 
 const formSchema = z.object({
   ticker: z.string().optional(),
-  period: z.string().optional(),
+  exchange: z.string().optional(),
   price: z.coerce.number().positive("Price must be > 0"),
   eps: z.coerce.number({ invalid_type_error: "Required" }),
   epsHistory: z.array(z.object({
@@ -56,17 +57,6 @@ const formSchema = z.object({
   dividend: z.coerce.number().min(0, "Must be ≥ 0"),
 });
 
-function getPeriodOptions(): string[] {
-  const now = new Date();
-  const year = now.getFullYear();
-  const opts: string[] = [];
-  for (let y = year; y >= year - 1; y--) {
-    for (let q = 4; q >= 1; q--) opts.push(`Q${q} ${y}`);
-  }
-  for (let y = year - 1; y >= year - 3; y--) opts.push(`FY ${y}`);
-  return opts;
-}
-
 type FormValues = z.infer<typeof formSchema>;
 
 const STORAGE_KEY = "stockanalyzer:last";
@@ -76,7 +66,7 @@ export default function Analyze() {
   const { toast } = useToast();
   const [result, setResult] = useState<CalculationResult | null>(null);
   const [ticker, setTicker] = useState<string>("Stock");
-  const [analyzedPeriod, setAnalyzedPeriod] = useState<string>("");
+  const [selectedExchange, setSelectedExchange] = useState<string>(".JK");
   const [analyzedAt, setAnalyzedAt] = useState<Date | null>(null);
   const reportCardRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -101,10 +91,7 @@ export default function Analyze() {
       return;
     }
 
-    let fetchTicker = rawTicker.toUpperCase();
-    if (!fetchTicker.includes(".")) {
-      fetchTicker += ".JK";
-    }
+    const fetchTicker = getTickerWithSuffix(rawTicker, selectedExchange);
 
     setIsFetching(true);
     try {
@@ -121,7 +108,7 @@ export default function Analyze() {
 
       const formData = {
         ticker: data.ticker || fetchTicker,
-        period: "",
+        exchange: selectedExchange,
         price: data.price || 0,
         eps: data.eps || 0,
         epsHistory: epsHistoryValues.map((v: number) => ({ value: v })),
@@ -244,7 +231,7 @@ export default function Analyze() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       ticker: "",
-      period: "",
+      exchange: ".JK",
       price: 0,
       eps: 0,
       epsHistory: [{ value: 0 }, { value: 0 }, { value: 0 }],
@@ -287,7 +274,7 @@ export default function Analyze() {
         const calc = calculateAnalysis(mappedInput);
         setResult(calc);
         if (decoded.ticker) setTicker(decoded.ticker);
-        if (decoded.period) setAnalyzedPeriod(decoded.period);
+        if (decoded.exchange) setSelectedExchange(decoded.exchange);
         setAnalyzedAt(new Date());
         loadedFromUrl = true;
       } catch (e) {
@@ -308,7 +295,7 @@ export default function Analyze() {
           const calc = calculateAnalysis(parsed);
           setResult(calc);
           if (parsed.ticker) setTicker(parsed.ticker);
-          if (parsed.period) setAnalyzedPeriod(parsed.period);
+          if (parsed.exchange) setSelectedExchange(parsed.exchange);
           setAnalyzedAt(new Date());
         } catch (e) {
           console.error("Failed to parse local storage", e);
@@ -339,10 +326,9 @@ export default function Analyze() {
     
     const displayTicker = data.ticker?.toUpperCase() || "Stock";
     setTicker(displayTicker);
-    setAnalyzedPeriod(data.period || "");
     setAnalyzedAt(new Date());
 
-    const persisted = { ...input, period: data.period || "" };
+    const persisted = { ...input, exchange: selectedExchange };
 
     // Save to local storage
     localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted));
@@ -366,7 +352,7 @@ export default function Analyze() {
     const input = {
       ...data,
       epsHistory: data.epsHistory.map(h => h.value),
-      period: data.period || "",
+      exchange: selectedExchange,
     };
     const encoded = btoa(JSON.stringify(input));
     const url = `${window.location.origin}${window.location.pathname}?data=${encoded}`;
@@ -488,7 +474,10 @@ export default function Analyze() {
                           <FormLabel>Ticker Symbol</FormLabel>
                           <div className="flex gap-2">
                             <FormControl>
-                              <Input placeholder="e.g. BBCA" {...field} />
+                              <Input
+                                placeholder={EXCHANGES.find(e => e.suffix === selectedExchange)?.placeholder || "Ticker"}
+                                {...field}
+                              />
                             </FormControl>
                             <Button
                               type="button"
@@ -508,22 +497,33 @@ export default function Analyze() {
                     />
                     <FormField
                       control={form.control}
-                      name="period"
+                      name="exchange"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Data Period</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value || ""}>
+                          <FormLabel>Exchange</FormLabel>
+                          <Select
+                            onValueChange={(val) => {
+                              field.onChange(val);
+                              setSelectedExchange(val);
+                            }}
+                            value={field.value || selectedExchange}
+                          >
                             <FormControl>
                               <SelectTrigger>
-                                <SelectValue placeholder="Select period" />
+                                <SelectValue placeholder="Select exchange" />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {getPeriodOptions().map((opt) => (
-                                <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                              {EXCHANGES.map((ex) => (
+                                <SelectItem key={ex.suffix} value={ex.suffix}>
+                                  {ex.country} ({ex.exchange})
+                                </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
+                          <FormDescription className="text-[10px]">
+                            {EXCHANGES.find(e => e.suffix === (field.value || selectedExchange))?.examples || ""}
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -1046,7 +1046,7 @@ export default function Analyze() {
                 <div className="border-t border-border/60 bg-muted/30 px-6 md:px-8 py-3 flex flex-col sm:flex-row justify-between items-center text-xs text-muted-foreground gap-2">
                   <span className="font-serif italic">ValuLens</span>
                   <span className="text-center">
-                    Analyzed {(analyzedAt ?? new Date()).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })} · {analyzedPeriod || "—"}
+                    Analyzed {(analyzedAt ?? new Date()).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })} · {selectedExchange || "—"}
                   </span>
                   <span className="font-mono text-[10px] text-muted-foreground/50">funda.farelhanafi.my.id</span>
                 </div>
