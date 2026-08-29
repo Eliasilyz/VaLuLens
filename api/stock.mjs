@@ -1,9 +1,6 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
-import YahooFinance from "yahoo-finance2";
+import yahooFinance from "yahoo-finance2";
 
-const yahooFinance = new YahooFinance();
-
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -36,37 +33,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const price = quote.regularMarketPrice ?? 0;
 
-    // TTM EPS
     const incomeStatements = summary.incomeStatementHistory?.incomeStatementHistory ?? [];
     const latestIncome = incomeStatements[0];
     const eps = latestIncome?.basicEps ?? latestIncome?.dilutedEps ?? 0;
 
-    // Shares outstanding
     const sharesOutstanding =
       summary.defaultKeyStatistics?.sharesOutstanding ??
       summary.summaryDetail?.sharesOutstanding ??
       0;
 
-    // Dividend per share (annual)
     const dividendRate = summary.summaryDetail?.dividendRate ?? 0;
     const dividendYieldRaw = summary.summaryDetail?.dividendYield ?? 0;
     const dividendPerShare = dividendRate > 0 ? dividendRate : price * dividendYieldRaw;
 
-    // BVPS from latest balance sheet
     const balanceSheets = summary.balanceSheetHistory?.balanceSheetHistory ?? [];
     const latestBS = balanceSheets[0];
     const totalEquity = latestBS?.totalStockholderEquity ?? 0;
     const bvps = sharesOutstanding > 0 ? totalEquity / sharesOutstanding : 0;
 
-    // ROE & DER
     const roeRaw = summary.defaultKeyStatistics?.returnOnEquity ?? 0;
-    const roe = Math.round(roeRaw * 100 * 100) / 100; // convert 0.15 -> 15
+    const roe = Math.round(roeRaw * 100 * 100) / 100;
 
     const derRaw = summary.defaultKeyStatistics?.debtToEquity ?? 0;
-    const der = Math.round((derRaw / 100) * 100) / 100; // Yahoo returns as percentage (e.g. 150 for 1.5)
+    const der = Math.round((derRaw / 100) * 100) / 100;
 
-    // EPS history (annual, oldest to newest)
-    const epsHistory: number[] = [];
+    const epsHistory = [];
     for (let i = incomeStatements.length - 1; i >= 0; i--) {
       const statement = incomeStatements[i];
       const annualEPS = statement?.basicEps ?? statement?.dilutedEps ?? 0;
@@ -85,7 +76,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       currency: quote.currency ?? "IDR",
       shortName: quote.shortName ?? quote.longName ?? symbol,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Yahoo Finance error:", error);
     return res.status(500).json({
       error: error?.message ?? "Failed to fetch stock data",
