@@ -6,8 +6,17 @@ const INDONESIAN_STOCKS = [
   "ASII", "UNVR", "HMSP", "GGRM", "KLBF",
   "ICBP", "INDF", "SMGR", "TOWR", "EXCL",
   "ISAT", "ADRO", "PTBA", "ANTM", "INCO",
-  "MDKA", "CPIN", "WIKA", "WSKT", "JSMR",
+  "CPIN", "JSMR", "MEDC", "PGAS", "BFIN",
 ];
+
+async function fetchWithTimeout(promiseFn, timeoutMs = 8000) {
+  return Promise.race([
+    promiseFn(),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("timeout")), timeoutMs)
+    ),
+  ]);
+}
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -25,54 +34,59 @@ export default async function handler(req, res) {
       try {
         const symbol = `${ticker}.JK`;
 
-        const [quote, summary, fundamentals] = await Promise.all([
-          yahooFinance.quote(symbol),
-          yahooFinance.quoteSummary(symbol, {
-            modules: ["financialData", "defaultKeyStatistics"],
-          }),
-          yahooFinance.fundamentalsTimeSeries(symbol, {
-            period1: "10y",
-            module: "financials",
-            type: "annual",
-          }),
-        ]);
-
+        const quote = await fetchWithTimeout(() => yahooFinance.quote(symbol));
         const price = quote.regularMarketPrice ?? 0;
         const eps = quote.epsTrailingTwelveMonths ?? 0;
-        const bvps = summary.defaultKeyStatistics?.bookValue ?? 0;
-        const roeRaw = summary.financialData?.returnOnEquity ?? 0;
-        const roe = Math.round(roeRaw * 100 * 100) / 100;
-        const derRaw = summary.financialData?.debtToEquity ?? 0;
-        const der = Math.round((derRaw / 100) * 100) / 100;
 
-        const epsHistory = [];
-        if (Array.isArray(fundamentals) && fundamentals.length > 0) {
-          for (let i = fundamentals.length - 1; i >= 0; i--) {
-            const record = fundamentals[i];
-            const annualEPS = record?.basicEPS ?? record?.netIncomeCommonStockholders ?? 0;
-            epsHistory.push(annualEPS);
+        // Try quoteSummary separately, skip on failure
+        let bvps = 0, roe = 0, der = 0;
+        try {
+          const summary = await fetchWithTimeout(() =>
+            yahooFinance.quoteSummary(symbol, {
+              modules: ["financialData", "defaultKeyStatistics"],
+            })
+          );
+          bvps = summary.defaultKeyStatistics?.bookValue ?? 0;
+          const roeRaw = summary.financialData?.returnOnEquity ?? 0;
+          roe = Math.round(roeRaw * 100 * 100) / 100;
+          const derRaw = summary.financialData?.debtToEquity ?? 0;
+          der = Math.round((derRaw / 100) * 100) / 100;
+        } catch {
+          // skip summary data
+        }
+
+        // Try fundamentals separately, skip on failure
+        let epsHistory = [];
+        try {
+          const fundamentals = await fetchWithTimeout(() =>
+            yahooFinance.fundamentalsTimeSeries(symbol, {
+              period1: "10y",
+              module: "financials",
+              type: "annual",
+            })
+          );
+          if (Array.isArray(fundamentals) && fundamentals.length > 0) {
+            for (let i = fundamentals.length - 1; i >= 0; i--) {
+              const record = fundamentals[i];
+              const annualEPS = record?.basicEPS ?? record?.netIncomeCommonStockholders ?? 0;
+              epsHistory.push(annualEPS);
+            }
           }
+        } catch {
+          // skip fundamentals
         }
 
-        if (epsHistory.length >= 3) {
-          results.push({
-            ticker: symbol,
-            price,
-            eps,
-            bvps,
-            roe,
-            der,
-            epsHistory,
-          });
+        // Only include if we got enough data
+        if (epsHistory.length >= 3 && eps > 0) {
+          results.push({ ticker: symbol, price, eps, bvps, roe, der, epsHistory });
         }
-      } catch (err) {
-        console.error(`Error fetching ${ticker}:`, err.message);
+      } catch {
+        // Skip this stock entirely
       }
     }
 
     return res.status(200).json({ stocks: results });
   } catch (error) {
-    console.error("Batch fetch error:", error);
     return res.status(500).json({ error: error?.message ?? "Failed to fetch stock data" });
   }
 }
