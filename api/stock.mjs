@@ -51,6 +51,7 @@ export default async function handler(req, res) {
 
     // EPS history from fundamentalsTimeSeries (annual income statements, oldest to newest)
     const epsHistory = [];
+    let epsHistorySource = "real";
     if (Array.isArray(fundamentals) && fundamentals.length > 0) {
       for (let i = fundamentals.length - 1; i >= 0; i--) {
         const record = fundamentals[i];
@@ -64,6 +65,7 @@ export default async function handler(req, res) {
       const fallback = eps || 0;
       epsHistory.length = 0;
       epsHistory.push(fallback, fallback, fallback);
+      epsHistorySource = "fallback";
     }
 
     return res.status(200).json({
@@ -75,6 +77,7 @@ export default async function handler(req, res) {
       roe,
       der,
       epsHistory,
+      epsHistorySource,
       currency: quote.currency ?? "IDR",
       shortName: quote.shortName ?? quote.longName ?? symbol,
     });

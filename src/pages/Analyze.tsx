@@ -87,6 +87,7 @@ export default function Analyze() {
   const [trainingProgress, setTrainingProgress] = useState({ epoch: 0, loss: 0 });
   const [modelReady, setModelReady] = useState(false);
   const [showMLPanel, setShowMLPanel] = useState(false);
+  const [epsHistorySource, setEpsHistorySource] = useState<"real" | "fallback">("real");
 
   // Check for saved model on mount
   useEffect(() => {
@@ -132,11 +133,13 @@ export default function Analyze() {
 
       form.reset(formData);
       setTicker(data.ticker || fetchTicker);
+      setEpsHistorySource(data.epsHistorySource ?? "real");
 
       // Auto-calculate immediately
       const input: StockInput = {
         ...formData,
         epsHistory: epsHistoryValues,
+        epsHistorySource: data.epsHistorySource ?? "real",
       };
 
       // Auto-predict if model is ready
@@ -226,6 +229,7 @@ export default function Analyze() {
       der,
       roe,
       dividend,
+      epsHistorySource,
     };
     const calc = calculateAnalysis(input, prediction.predictedGrowthRate);
     setResult(calc);
@@ -325,7 +329,8 @@ export default function Analyze() {
   const onSubmit = (data: FormValues) => {
     const input: StockInput = {
       ...data,
-      epsHistory: data.epsHistory.map(h => h.value)
+      epsHistory: data.epsHistory.map(h => h.value),
+      epsHistorySource,
     };
     
     const mlGrowth = mlPrediction?.predictedGrowthRate ?? null;

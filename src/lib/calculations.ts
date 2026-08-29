@@ -9,6 +9,7 @@ export interface StockInput {
   der: number;
   roe: number;
   dividend: number;
+  epsHistorySource?: "real" | "fallback";
 }
 
 export interface PriceZone {
@@ -114,8 +115,9 @@ function buildCondition(
   if (result.per !== null && result.per > 25) risks.push(`P/E ${result.per.toFixed(1)} — terlalu mahal`);
   if (result.pbv !== null && result.pbv > 5) risks.push(`P/B ${result.pbv?.toFixed(1)} — overvalued relatif terhadap book value`);
   if (result.dividendYield < 1 && result.dividendYield > 0) risks.push(`Dividend yield ${result.dividendYield.toFixed(1)}% — sangat rendah`);
-  if (input.epsHistory.length < 4) risks.push("Data EPS kurang dari 4 tahun — prediksi kurang akurat");
-  if (result.growthSource === "roe") risks.push("Growth diestimasi dari ROE (EPS history tidak cukup) — hasil bisa kurang akurat");
+    if (input.epsHistory.length < 4) risks.push("Data EPS kurang dari 4 tahun — prediksi kurang akurat");
+    if (input.epsHistorySource === "fallback") risks.push("EPS history tidak tersedia dari API — menggunakan data fallback, pertumbuhan diestimasi dari ROE");
+    else if (result.growthSource === "roe") risks.push("Growth diestimasi dari ROE (EPS CAGR tidak positif) — hasil bisa kurang akurat");
 
   // Verdict
   let verdict: StockCondition["verdict"] = "Hold";
