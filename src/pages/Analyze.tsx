@@ -15,7 +15,9 @@ import {
   HelpCircle,
   TrendingUp,
   TrendingDown,
-  Minus
+  Minus,
+  Search,
+  Loader2
 } from "lucide-react";
 
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
@@ -76,6 +78,53 @@ export default function Analyze() {
   const reportCardRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [recentAnalyses, setRecentAnalyses] = useState<{ticker: string, date: string, input: StockInput}[]>([]);
+  const [isFetching, setIsFetching] = useState(false);
+
+  const handleFetchStock = async () => {
+    const rawTicker = form.getValues("ticker")?.trim();
+    if (!rawTicker) {
+      toast({ title: "Enter a ticker", description: "Please type a stock ticker first.", variant: "destructive" });
+      return;
+    }
+
+    // Auto-append .JK for Indonesian tickers (no suffix)
+    let fetchTicker = rawTicker.toUpperCase();
+    if (!fetchTicker.includes(".")) {
+      fetchTicker += ".JK";
+    }
+
+    setIsFetching(true);
+    try {
+      const res = await fetch(`/api/stock?ticker=${encodeURIComponent(fetchTicker)}`);
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to fetch");
+      }
+      const data = await res.json();
+
+      const epsHistoryValues = data.epsHistory?.length >= 3
+        ? data.epsHistory
+        : [data.eps || 0, data.eps || 0, data.eps || 0];
+
+      form.reset({
+        ticker: data.ticker || fetchTicker,
+        period: "",
+        price: data.price || 0,
+        eps: data.eps || 0,
+        epsHistory: epsHistoryValues.map((v: number) => ({ value: v })),
+        bvps: data.bvps || 0,
+        der: data.der || 0,
+        roe: data.roe || 0,
+        dividend: data.dividend || 0,
+      });
+
+      toast({ title: "Data fetched", description: `${data.ticker || fetchTicker} — ${data.shortName || ""}` });
+    } catch (err: any) {
+      toast({ title: "Fetch failed", description: err.message || "Could not fetch stock data.", variant: "destructive" });
+    } finally {
+      setIsFetching(false);
+    }
+  };
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -321,9 +370,22 @@ export default function Analyze() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Ticker Symbol</FormLabel>
-                          <FormControl>
-                            <Input placeholder="e.g. BBRI.JK" {...field} />
-                          </FormControl>
+                          <div className="flex gap-2">
+                            <FormControl>
+                              <Input placeholder="e.g. BBCA" {...field} />
+                            </FormControl>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="shrink-0"
+                              onClick={handleFetchStock}
+                              disabled={isFetching}
+                              title="Fetch data from Yahoo Finance"
+                            >
+                              {isFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                            </Button>
+                          </div>
                           <FormMessage />
                         </FormItem>
                       )}

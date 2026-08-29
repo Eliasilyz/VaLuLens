@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Calculator, Share2, ArrowRightLeft, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Calculator, Share2, ArrowRightLeft, TrendingUp, TrendingDown, Minus, Search, Loader2 } from "lucide-react";
 
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { calculateAnalysis, type StockInput, type CalculationResult } from "@/lib/calculations";
@@ -36,6 +36,46 @@ export default function Compare() {
   const [resultA, setResultA] = useState<CalculationResult | null>(null);
   const [resultB, setResultB] = useState<CalculationResult | null>(null);
   const [hasCompared, setHasCompared] = useState(false);
+  const [isFetchingA, setIsFetchingA] = useState(false);
+  const [isFetchingB, setIsFetchingB] = useState(false);
+
+  const handleFetchStock = async (prefix: "stockA" | "stockB", setLoading: (v: boolean) => void) => {
+    const rawTicker = form.getValues(`${prefix}.ticker`)?.trim();
+    if (!rawTicker) {
+      toast({ title: "Enter a ticker", description: "Please type a stock ticker first.", variant: "destructive" });
+      return;
+    }
+
+    let fetchTicker = rawTicker.toUpperCase();
+    if (!fetchTicker.includes(".")) {
+      fetchTicker += ".JK";
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/stock?ticker=${encodeURIComponent(fetchTicker)}`);
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to fetch");
+      }
+      const data = await res.json();
+
+      const current = form.getValues(prefix);
+      form.setValue(`${prefix}.ticker`, data.ticker || fetchTicker);
+      form.setValue(`${prefix}.price`, data.price || 0);
+      form.setValue(`${prefix}.eps`, data.eps || 0);
+      form.setValue(`${prefix}.bvps`, data.bvps || 0);
+      form.setValue(`${prefix}.der`, data.der || 0);
+      form.setValue(`${prefix}.roe`, data.roe || 0);
+      form.setValue(`${prefix}.dividend`, data.dividend || 0);
+
+      toast({ title: "Data fetched", description: `${data.ticker || fetchTicker} — ${data.shortName || ""}` });
+    } catch (err: any) {
+      toast({ title: "Fetch failed", description: err.message || "Could not fetch stock data.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const form = useForm<CompareFormValues>({
     resolver: zodResolver(compareFormSchema),
@@ -125,7 +165,9 @@ export default function Compare() {
     }
   };
 
-  const StockInputForm = ({ prefix, label }: { prefix: "stockA" | "stockB", label: string }) => (
+  const StockInputForm = ({ prefix, label }: { prefix: "stockA" | "stockB", label: string }) => {
+    const isLoading = prefix === "stockA" ? isFetchingA : isFetchingB;
+    return (
     <Card className="border-border/50 shadow-sm">
       <CardHeader className="pb-4">
         <CardTitle className="text-lg flex items-center gap-2">
@@ -134,7 +176,23 @@ export default function Compare() {
       </CardHeader>
       <CardContent className="space-y-4">
         <FormField control={form.control} name={`${prefix}.ticker`} render={({ field }) => (
-          <FormItem><FormLabel>Ticker</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>
+          <FormItem>
+            <FormLabel>Ticker</FormLabel>
+            <div className="flex gap-2">
+              <FormControl><Input placeholder="e.g. BBCA" {...field} /></FormControl>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="shrink-0"
+                onClick={() => handleFetchStock(prefix, prefix === "stockA" ? setIsFetchingA : setIsFetchingB)}
+                disabled={isLoading}
+                title="Fetch data from Yahoo Finance"
+              >
+                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+              </Button>
+            </div>
+          </FormItem>
         )} />
         <div className="grid grid-cols-2 gap-4">
           <FormField control={form.control} name={`${prefix}.price`} render={({ field }) => (
@@ -162,7 +220,8 @@ export default function Compare() {
         </div>
       </CardContent>
     </Card>
-  );
+    );
+  };
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-5xl">

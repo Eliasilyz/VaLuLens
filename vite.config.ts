@@ -16,5 +16,11 @@ export default defineConfig({
   },
   server: {
     port: Number(process.env.PORT) || 5173, // Pake fallback biar gak error
+    watch: {
+      ignored: ["**/api/**"],
+    },
+    fs: {
+      deny: ["**/api/**"],
+    },
   }
 });
