@@ -26,7 +26,8 @@ export default async function handler(req, res) {
       }),
       yahooFinance.fundamentalsTimeSeries(symbol, {
         period1: "5y",
-        module: "income-statement",
+        module: "financials",
+        type: "annual",
       }),
     ]);
 
