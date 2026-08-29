@@ -420,7 +420,7 @@ export default function Analyze() {
     }
   };
 
-  const formatCurrency = (val: number | null) => formatCurrencyByTicker(val, ticker);
+  const formatCurrency = (val: number | null) => formatCurrencyByTicker(val, ticker, selectedExchange);
 
   const formatPercent = (val: number | null) => {
     if (val === null) return "N/A";
@@ -1093,7 +1093,7 @@ export default function Analyze() {
                 </CardHeader>
                 <CardContent>
                   <Suspense fallback={<Skeleton className="w-full h-[300px] rounded-lg" />}>
-                    <EpsChart data={chartData} ticker={ticker} />
+                    <EpsChart data={chartData} ticker={ticker} exchange={selectedExchange} />
                   </Suspense>
                 </CardContent>
               </Card>

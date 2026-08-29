@@ -4,9 +4,10 @@ import { formatCurrency } from "@/lib/currency";
 interface EpsChartProps {
   data: { year: number; eps: number }[];
   ticker?: string;
+  exchange?: string;
 }
 
-export default function EpsChart({ data, ticker }: EpsChartProps) {
+export default function EpsChart({ data, ticker, exchange }: EpsChartProps) {
   if (!data || data.length === 0) return null;
 
   return (
@@ -25,7 +26,7 @@ export default function EpsChart({ data, ticker }: EpsChartProps) {
             tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(val) => formatCurrency(val, ticker)}
+            tickFormatter={(val) => formatCurrency(val, ticker, exchange)}
             dx={-10}
             width={80}
           />
@@ -37,7 +38,7 @@ export default function EpsChart({ data, ticker }: EpsChartProps) {
               color: "hsl(var(--foreground))"
             }}
             itemStyle={{ color: "hsl(var(--primary))" }}
-            formatter={(value: number) => [formatCurrency(value, ticker), "EPS"]}
+            formatter={(value: number) => [formatCurrency(value, ticker, exchange), "EPS"]}
             labelStyle={{ color: "hsl(var(--muted-foreground))", marginBottom: "4px" }}
           />
           <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" />

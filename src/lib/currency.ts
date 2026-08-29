@@ -21,6 +21,7 @@ const SUFFIX_MAP: Record<string, CurrencyConfig> = {
   SZ: { code: "CNY", locale: "zh-CN", fractionDigits: 2 },
   BO: { code: "INR", locale: "en-IN", fractionDigits: 2 },
   NS: { code: "INR", locale: "en-IN", fractionDigits: 2 },
+  US: { code: "USD", locale: "en-US", fractionDigits: 2 },
 };
 
 const DEFAULT_CONFIG: CurrencyConfig = {
@@ -29,18 +30,31 @@ const DEFAULT_CONFIG: CurrencyConfig = {
   fractionDigits: 0,
 };
 
-export function detectCurrency(ticker?: string | null): CurrencyConfig {
-  if (!ticker) return DEFAULT_CONFIG;
-  const trimmed = ticker.trim().toUpperCase();
-  const dotIdx = trimmed.lastIndexOf(".");
-  if (dotIdx === -1) return DEFAULT_CONFIG;
-  const suffix = trimmed.slice(dotIdx + 1);
-  return SUFFIX_MAP[suffix] ?? DEFAULT_CONFIG;
+export function detectCurrency(ticker?: string | null, exchangeSuffix?: string): CurrencyConfig {
+  // First try to detect from the ticker itself (e.g. "BBCA.JK" → JK)
+  if (ticker) {
+    const trimmed = ticker.trim().toUpperCase();
+    const dotIdx = trimmed.lastIndexOf(".");
+    if (dotIdx !== -1) {
+      const suffix = trimmed.slice(dotIdx + 1);
+      const match = SUFFIX_MAP[suffix];
+      if (match) return match;
+    }
+  }
+  // Fall back to the selected exchange suffix (e.g. ".SI" → SI)
+  if (exchangeSuffix) {
+    const clean = exchangeSuffix.replace(".", "").trim().toUpperCase();
+    if (clean) {
+      const match = SUFFIX_MAP[clean];
+      if (match) return match;
+    }
+  }
+  return DEFAULT_CONFIG;
 }
 
-export function formatCurrency(value: number | null | undefined, ticker?: string | null): string {
+export function formatCurrency(value: number | null | undefined, ticker?: string | null, exchangeSuffix?: string): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "N/A";
-  const cfg = detectCurrency(ticker);
+  const cfg = detectCurrency(ticker, exchangeSuffix);
   return new Intl.NumberFormat(cfg.locale, {
     style: "currency",
     currency: cfg.code,
@@ -49,6 +63,6 @@ export function formatCurrency(value: number | null | undefined, ticker?: string
   }).format(value);
 }
 
-export function getCurrencyCode(ticker?: string | null): string {
-  return detectCurrency(ticker).code;
+export function getCurrencyCode(ticker?: string | null, exchangeSuffix?: string): string {
+  return detectCurrency(ticker, exchangeSuffix).code;
 }
