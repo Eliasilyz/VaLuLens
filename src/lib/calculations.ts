@@ -20,11 +20,16 @@ export interface CalculationResult {
   epsGrowthTrend: Trend;
   epsGrowthArray: number[];
   dcfValue: number | null;
+  dcfValueML: number | null;
   peBandValue: number | null;
   fairValue: number | null;
+  fairValueML: number | null;
   marginOfSafety: number | null;
+  marginOfSafetyML: number | null;
   status: "Speculative" | "Undervalued" | "Fair Value" | "Overvalued";
+  statusML: "Speculative" | "Undervalued" | "Fair Value" | "Overvalued";
   financialScore: number;
+  mlGrowthRate: number | null;
   checklist: {
     roeHigh: boolean;
     derLow: boolean;
@@ -35,7 +40,7 @@ export interface CalculationResult {
   };
 }
 
-export function calculateAnalysis(input: StockInput): CalculationResult {
+export function calculateAnalysis(input: StockInput, mlGrowthRate?: number | null): CalculationResult {
   const { price, eps, epsHistory, bvps, der, roe, dividend } = input;
 
   // PER
@@ -115,6 +120,31 @@ export function calculateAnalysis(input: StockInput): CalculationResult {
     dcfValue = sumPV;
   }
 
+  // ML-based DCF (uses predicted growth rate if available)
+  let dcfValueML: number | null = null;
+  const mlG = (mlGrowthRate !== null && mlGrowthRate !== undefined && mlGrowthRate > 0)
+    ? Math.min(mlGrowthRate / 100, 0.10) // convert percentage to decimal, cap at 10%
+    : g; // fallback to CAGR/ROE-based growth
+
+  if (eps > 0 && mlG > 0) {
+    let sumPVml = 0;
+    let projectedEPSml = eps;
+    for (let year = 1; year <= 5; year++) {
+      projectedEPSml *= (1 + mlG);
+      sumPVml += projectedEPSml / Math.pow(1 + discountRate, year);
+    }
+    let terminalValueML = 0;
+    if (mlG < discountRate) {
+      terminalValueML = (projectedEPSml * (1 + mlG)) / (discountRate - mlG);
+    } else {
+      terminalValueML = (projectedEPSml * 1.03) / (discountRate - 0.03);
+    }
+    sumPVml += terminalValueML / Math.pow(1 + discountRate, 5);
+    dcfValueML = sumPVml;
+  } else if (dcfValue !== null) {
+    dcfValueML = dcfValue;
+  }
+
   // PE Band Fair Price
   const peBandValue = eps > 0 ? eps * 15 : null;
 
@@ -137,10 +167,33 @@ export function calculateAnalysis(input: StockInput): CalculationResult {
 
   const fairValue = totalWeight > 0 ? weightedSum / totalWeight : null;
 
+  // ML Fair Value (same weighting but uses ML DCF)
+  let mlTotalWeight = 0;
+  let mlWeightedSum = 0;
+  if (grahamNumber !== null) {
+    mlTotalWeight += 0.3;
+    mlWeightedSum += grahamNumber * 0.2;
+  }
+  if (dcfValueML !== null) {
+    mlTotalWeight += 0.4;
+    mlWeightedSum += dcfValueML * 0.4;
+  }
+  if (peBandValue !== null) {
+    mlTotalWeight += 0.3;
+    mlWeightedSum += peBandValue * 0.3;
+  }
+  const fairValueML = mlTotalWeight > 0 ? mlWeightedSum / mlTotalWeight : null;
+
   // Margin of Safety
   let marginOfSafety: number | null = null;
   if (fairValue !== null && fairValue > 0) {
     marginOfSafety = ((fairValue - price) / fairValue) * 100;
+  }
+
+  // ML Margin of Safety
+  let marginOfSafetyML: number | null = null;
+  if (fairValueML !== null && fairValueML > 0) {
+    marginOfSafetyML = ((fairValueML - price) / fairValueML) * 100;
   }
 
   // Status
@@ -150,6 +203,15 @@ export function calculateAnalysis(input: StockInput): CalculationResult {
   } else if (marginOfSafety !== null) {
     if (marginOfSafety >= 30) status = "Undervalued";
     else if (marginOfSafety >= 10) status = "Fair Value";
+  }
+
+  // ML Status
+  let statusML: CalculationResult["statusML"] = "Overvalued";
+  if (eps <= 0) {
+    statusML = "Speculative";
+  } else if (marginOfSafetyML !== null) {
+    if (marginOfSafetyML >= 30) statusML = "Undervalued";
+    else if (marginOfSafetyML >= 10) statusML = "Fair Value";
   }
 
   // Financial Score
@@ -188,11 +250,16 @@ if (isBank) {
     epsGrowthTrend,
     epsGrowthArray,
     dcfValue,
+    dcfValueML,
     peBandValue,
     fairValue,
+    fairValueML,
     marginOfSafety,
+    marginOfSafetyML,
     status,
+    statusML,
     financialScore: Math.min(100, Math.max(0, score)),
+    mlGrowthRate: mlGrowthRate ?? null,
     checklist
   };
 }

@@ -17,12 +17,15 @@ import {
   TrendingDown,
   Minus,
   Search,
-  Loader2
+  Loader2,
+  Brain,
+  Cpu
 } from "lucide-react";
 
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { calculateAnalysis, type StockInput, type CalculationResult } from "@/lib/calculations";
 import { formatCurrency as formatCurrencyByTicker } from "@/lib/currency";
+import { trainModel, loadModel, predictEPSGrowth, hasSavedModel, type TrainingStock, type MLPrediction } from "@/lib/ml-model";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -79,6 +82,16 @@ export default function Analyze() {
   const [isExporting, setIsExporting] = useState(false);
   const [recentAnalyses, setRecentAnalyses] = useState<{ticker: string, date: string, input: StockInput}[]>([]);
   const [isFetching, setIsFetching] = useState(false);
+  const [mlPrediction, setMlPrediction] = useState<MLPrediction | null>(null);
+  const [isTraining, setIsTraining] = useState(false);
+  const [trainingProgress, setTrainingProgress] = useState({ epoch: 0, loss: 0 });
+  const [modelReady, setModelReady] = useState(false);
+  const [showMLPanel, setShowMLPanel] = useState(false);
+
+  // Check for saved model on mount
+  useEffect(() => {
+    setModelReady(hasSavedModel());
+  }, []);
 
   const handleFetchStock = async () => {
     const rawTicker = form.getValues("ticker")?.trim();
@@ -124,6 +137,58 @@ export default function Analyze() {
     } finally {
       setIsFetching(false);
     }
+  };
+
+  const handleTrainModel = async () => {
+    setIsTraining(true);
+    setTrainingProgress({ epoch: 0, loss: 0 });
+    try {
+      const res = await fetch("/api/stocks-batch");
+      if (!res.ok) throw new Error("Failed to fetch training data");
+      const { stocks } = await res.json();
+
+      if (!stocks || stocks.length < 5) {
+        throw new Error("Not enough training data. Got " + (stocks?.length ?? 0) + " stocks.");
+      }
+
+      const trainingData: TrainingStock[] = stocks.map((s: any) => ({
+        ticker: s.ticker,
+        epsHistory: s.epsHistory,
+        roe: s.roe,
+        der: s.der,
+      }));
+
+      await trainModel(trainingData, (epoch, loss) => {
+        setTrainingProgress({ epoch, loss });
+      });
+
+      setModelReady(true);
+      toast({ title: "Model trained!", description: `Trained on ${trainingData.length} stocks. ML predictions are now available.` });
+    } catch (err: any) {
+      toast({ title: "Training failed", description: err.message || "Could not train model.", variant: "destructive" });
+    } finally {
+      setIsTraining(false);
+    }
+  };
+
+  const handlePredict = async () => {
+    const model = await loadModel();
+    if (!model) {
+      toast({ title: "No model", description: "Train the ML model first.", variant: "destructive" });
+      return;
+    }
+
+    const epsHistory = form.getValues("epsHistory").map(h => h.value);
+    const roe = form.getValues("roe");
+    const der = form.getValues("der");
+
+    const prediction = predictEPSGrowth(model, epsHistory, roe, der);
+    setMlPrediction(prediction);
+
+    toast({
+      title: "ML Prediction",
+      description: `Predicted growth: ${prediction.predictedGrowthRate}% | Confidence: ${(prediction.confidence * 100).toFixed(0)}%`,
+    });
   };
 
   const form = useForm<FormValues>({
@@ -218,7 +283,8 @@ export default function Analyze() {
       epsHistory: data.epsHistory.map(h => h.value)
     };
     
-    const calc = calculateAnalysis(input);
+    const mlGrowth = mlPrediction?.predictedGrowthRate ?? null;
+    const calc = calculateAnalysis(input, mlGrowth);
     setResult(calc);
     
     const displayTicker = data.ticker?.toUpperCase() || "Stock";
@@ -589,6 +655,101 @@ export default function Analyze() {
                   </Button>
                 </form>
               </Form>
+
+              {/* ML Panel */}
+              <Separator className="my-4" />
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowMLPanel(!showMLPanel)}
+                  className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full"
+                >
+                  <Brain className="w-4 h-4" />
+                  <span>AI Growth Prediction (TensorFlow.js)</span>
+                  <Badge variant="outline" className="ml-auto text-[10px]">
+                    {modelReady ? "Model Ready" : "Not Trained"}
+                  </Badge>
+                </button>
+
+                {showMLPanel && (
+                  <div className="mt-3 space-y-3">
+                    <Card className="border-dashed border-border/50">
+                      <CardContent className="pt-4 space-y-3">
+                        {!modelReady ? (
+                          <>
+                            <p className="text-xs text-muted-foreground">
+                              Train an LSTM model on historical EPS data from 25+ Indonesian stocks to predict growth rates.
+                            </p>
+                            <Button
+                              onClick={handleTrainModel}
+                              disabled={isTraining}
+                              className="w-full"
+                              variant="outline"
+                              size="sm"
+                            >
+                              {isTraining ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  Training... Epoch {trainingProgress.epoch}/50
+                                </>
+                              ) : (
+                                <>
+                                  <Cpu className="w-4 h-4 mr-2" />
+                                  Train Model
+                                </>
+                              )}
+                            </Button>
+                            {isTraining && (
+                              <Progress value={(trainingProgress.epoch / 50) * 100} className="h-2" />
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-xs text-muted-foreground">
+                              Model trained. Click predict to get ML-based EPS growth prediction for this stock.
+                            </p>
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={handlePredict}
+                                className="flex-1"
+                                variant="outline"
+                                size="sm"
+                              >
+                                <Brain className="w-4 h-4 mr-2" />
+                                Predict Growth
+                              </Button>
+                              <Button
+                                onClick={handleTrainModel}
+                                disabled={isTraining}
+                                variant="ghost"
+                                size="sm"
+                              >
+                                {isTraining ? <Loader2 className="w-4 h-4 animate-spin" /> : "Re-train"}
+                              </Button>
+                            </div>
+                            {mlPrediction && (
+                              <div className="bg-muted/30 rounded-lg p-3 space-y-1">
+                                <div className="flex justify-between text-xs">
+                                  <span className="text-muted-foreground">Predicted Growth</span>
+                                  <span className="font-mono font-medium">{mlPrediction.predictedGrowthRate}%</span>
+                                </div>
+                                <div className="flex justify-between text-xs">
+                                  <span className="text-muted-foreground">Confidence</span>
+                                  <span className="font-mono">{(mlPrediction.confidence * 100).toFixed(0)}%</span>
+                                </div>
+                                <div className="flex justify-between text-xs">
+                                  <span className="text-muted-foreground">Next Year EPS</span>
+                                  <span className="font-mono">{mlPrediction.nextYearEPS}</span>
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -636,6 +797,26 @@ export default function Analyze() {
                           </>
                         ) : "MoS N/A"}
                       </div>
+                      {result.mlGrowthRate !== null && (
+                        <div className="mt-2 pt-2 border-t border-border/30">
+                          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5 flex items-center gap-1 justify-end">
+                            <Brain className="w-3 h-3" /> ML Predicted
+                          </div>
+                          <div className="text-lg font-bold text-violet-500">
+                            {formatCurrency(result.fairValueML)}
+                          </div>
+                          <div className={`text-xs font-medium flex items-center md:justify-end gap-1 ${
+                            result.marginOfSafetyML !== null && result.marginOfSafetyML > 0 ? "text-emerald-500" : "text-destructive"
+                          }`}>
+                            {result.marginOfSafetyML !== null ? (
+                              <>
+                                {result.marginOfSafetyML > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                                {formatPercent(result.marginOfSafetyML)} MoS
+                              </>
+                            ) : "MoS N/A"}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -643,6 +824,11 @@ export default function Analyze() {
                     <div className="bg-muted/30 p-4 rounded-lg border border-border/50">
                       <div className="text-xs text-muted-foreground mb-1 uppercase tracking-wide">DCF Value</div>
                       <div className="text-xl font-semibold font-mono">{formatCurrency(result.dcfValue)}</div>
+                      {result.mlGrowthRate !== null && (
+                        <div className="text-[10px] text-violet-500 font-mono mt-1">
+                          ML: {formatCurrency(result.dcfValueML)}
+                        </div>
+                      )}
                     </div>
                     <div className="bg-muted/30 p-4 rounded-lg border border-border/50">
                       <div className="text-xs text-muted-foreground mb-1 uppercase tracking-wide">Graham No.</div>
