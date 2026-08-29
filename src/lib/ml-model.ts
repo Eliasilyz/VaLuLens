@@ -81,8 +81,18 @@ function prepareTrainingData(stocks: TrainingStock[]): {
 
   const normalizationParams = allHistories.map((h) => normalize(h));
 
+  // Flatten xs to a flat number array for tensor4d
+  const flatData: number[] = [];
+  for (const x of xs) {
+    for (const seq of x) {
+      for (const val of seq) {
+        flatData.push(val);
+      }
+    }
+  }
+
   const featuresTensor = tf.tensor4d(
-    xs.map((x) => x),
+    flatData,
     [xs.length, 1, SEQUENCE_LENGTH, 1]
   );
 
@@ -149,7 +159,7 @@ export function predictEPSGrowth(
   const sequence = normalized.slice(-SEQUENCE_LENGTH);
 
   const inputTensor = tf.tensor4d(
-    [[sequence]],
+    sequence,
     [1, 1, SEQUENCE_LENGTH, 1]
   );
 
