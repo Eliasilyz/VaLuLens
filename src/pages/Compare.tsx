@@ -238,7 +238,7 @@ export default function Compare() {
       </div>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+        <form onSubmit={form.handleSubmit(onSubmit as any)} className="space-y-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <StockInputForm prefix="stockA" label="Company 1" />
             <StockInputForm prefix="stockB" label="Company 2" />

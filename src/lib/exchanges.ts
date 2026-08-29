@@ -9,7 +9,7 @@ export interface Exchange {
 
 export const EXCHANGES: Exchange[] = [
   { country: "Indonesia", flag: "🇮🇩", exchange: "IDX", suffix: ".JK", placeholder: "BBCA", examples: "BBCA, BBRI, TLKM" },
-  { country: "United States", flag: "🇺🇸", exchange: "NYSE / NASDAQ", suffix: "", placeholder: "AAPL", examples: "AAPL, TSLA, MSFT" },
+  { country: "United States", flag: "🇺🇸", exchange: "NYSE / NASDAQ", suffix: "US", placeholder: "AAPL", examples: "AAPL, TSLA, MSFT" },
   { country: "Singapore", flag: "🇸🇬", exchange: "SGX", suffix: ".SI", placeholder: "D05", examples: "D05.SI (DBS), U11.SI (UOB)" },
   { country: "Malaysia", flag: "🇲🇾", exchange: "Bursa Malaysia", suffix: ".KL", placeholder: "1155", examples: "1155.KL (Maybank)" },
   { country: "Japan", flag: "🇯🇵", exchange: "Tokyo Stock Exchange", suffix: ".T", placeholder: "7203", examples: "7203.T (Toyota)" },
@@ -26,6 +26,8 @@ export function getExchangeBySuffix(suffix: string): Exchange | undefined {
 
 export function getTickerWithSuffix(ticker: string, suffix: string): string {
   const upper = ticker.toUpperCase().trim();
+  // US stocks don't need a suffix
+  if (suffix === "US") return upper;
   // If user already typed the suffix, don't double-add
   if (suffix && upper.endsWith(suffix)) return upper;
   // If user typed a different suffix (e.g. .JK when exchange is .SI), replace it
