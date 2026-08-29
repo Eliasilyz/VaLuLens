@@ -28,11 +28,11 @@ import { formatCurrency as formatCurrencyByTicker } from "@/lib/currency";
 import { EXCHANGES, getTickerWithSuffix } from "@/lib/exchanges";
 import { trainModel, loadModel, predictEPSGrowth, hasSavedModel, type TrainingStock, type MLPrediction } from "@/lib/ml-model";
 import { Button } from "@/components/ui/button";
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
@@ -45,7 +45,6 @@ const EpsChart = lazy(() => import("@/components/analyzer/EpsChart"));
 
 const formSchema = z.object({
   ticker: z.string().optional(),
-  exchange: z.string().optional(),
   price: z.coerce.number().positive("Price must be > 0"),
   eps: z.coerce.number({ invalid_type_error: "Required" }),
   epsHistory: z.array(z.object({
@@ -98,8 +97,12 @@ export default function Analyze() {
     try {
       const res = await fetch(`/api/stock?ticker=${encodeURIComponent(fetchTicker)}`);
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Failed to fetch");
+        let errMsg = "Failed to fetch";
+        try {
+          const err = await res.json();
+          errMsg = err.error || errMsg;
+        } catch { /* non-JSON error response */ }
+        throw new Error(errMsg);
       }
       const data = await res.json();
 
@@ -109,7 +112,6 @@ export default function Analyze() {
 
       const formData = {
         ticker: data.ticker || fetchTicker,
-        exchange: selectedExchange,
         price: data.price || 0,
         eps: data.eps || 0,
         epsHistory: epsHistoryValues.map((v: number) => ({ value: v })),
@@ -125,8 +127,14 @@ export default function Analyze() {
 
       // Auto-calculate immediately
       const input: StockInput = {
-        ...formData,
+        ticker: data.ticker || fetchTicker,
+        price: data.price || 0,
+        eps: data.eps || 0,
         epsHistory: epsHistoryValues,
+        bvps: data.bvps || 0,
+        der: data.der || 0,
+        roe: data.roe || 0,
+        dividend: data.dividend || 0,
         epsHistorySource: data.epsHistorySource ?? "real",
       };
 
@@ -210,6 +218,7 @@ export default function Analyze() {
 
     // Auto-recalculate with ML prediction
     const input: StockInput = {
+      ticker: form.getValues("ticker"),
       price,
       eps: form.getValues("eps"),
       epsHistory,
@@ -232,7 +241,6 @@ export default function Analyze() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       ticker: "",
-      exchange: ".JK",
       price: 0,
       eps: 0,
       epsHistory: [{ value: 0 }, { value: 0 }, { value: 0 }],
@@ -263,26 +271,20 @@ export default function Analyze() {
     if (dataParam) {
       try {
         const decoded = JSON.parse(atob(dataParam));
-        // Migrate old 'period' field to 'exchange'
-        if (decoded.period && !decoded.exchange) {
-          decoded.exchange = ".JK";
-          delete decoded.period;
+        const epsArr = Array.isArray(decoded.epsHistory) ? decoded.epsHistory : [];
+        if (epsArr.length >= 3) {
+          const mapped = {
+            ...decoded,
+            epsHistory: epsArr.map((v: number) => ({ value: v }))
+          };
+          form.reset(mapped);
+          const calc = calculateAnalysis({ ...decoded, epsHistory: epsArr });
+          setResult(calc);
+          if (decoded.ticker) setTicker(decoded.ticker);
+          if (decoded.exchange) setSelectedExchange(decoded.exchange);
+          setAnalyzedAt(new Date());
+          loadedFromUrl = true;
         }
-        const mapped = {
-          ...decoded,
-          epsHistory: decoded.epsHistory.map((v: number) => ({ value: v }))
-        };
-        form.reset(mapped);
-        const mappedInput = {
-          ...decoded,
-          epsHistory: decoded.epsHistory
-        };
-        const calc = calculateAnalysis(mappedInput);
-        setResult(calc);
-        if (decoded.ticker) setTicker(decoded.ticker);
-        if (decoded.exchange) setSelectedExchange(decoded.exchange);
-        setAnalyzedAt(new Date());
-        loadedFromUrl = true;
       } catch (e) {
         console.error("Failed to parse URL params", e);
       }
@@ -293,22 +295,19 @@ export default function Analyze() {
       if (last) {
         try {
           const parsed = JSON.parse(last);
-          // Migrate old 'period' field to 'exchange'
-          if (parsed.period && !parsed.exchange) {
-            parsed.exchange = ".JK";
-            delete parsed.period;
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+          const epsArr = Array.isArray(parsed.epsHistory) ? parsed.epsHistory : [];
+          if (epsArr.length >= 3) {
+            const mapped = {
+              ...parsed,
+              epsHistory: epsArr.map((v: number) => ({ value: v }))
+            };
+            form.reset(mapped);
+            const calc = calculateAnalysis({ ...parsed, epsHistory: epsArr });
+            setResult(calc);
+            if (parsed.ticker) setTicker(parsed.ticker);
+            if (parsed.exchange) setSelectedExchange(parsed.exchange);
+            setAnalyzedAt(new Date());
           }
-          const mapped = {
-            ...parsed,
-            epsHistory: parsed.epsHistory.map((v: number) => ({ value: v }))
-          };
-          form.reset(mapped);
-          const calc = calculateAnalysis(parsed);
-          setResult(calc);
-          if (parsed.ticker) setTicker(parsed.ticker);
-          if (parsed.exchange) setSelectedExchange(parsed.exchange);
-          setAnalyzedAt(new Date());
         } catch (e) {
           console.error("Failed to parse local storage", e);
         }
@@ -327,8 +326,14 @@ export default function Analyze() {
 
   const onSubmit = (data: FormValues) => {
     const input: StockInput = {
-      ...data,
+      ticker: data.ticker,
+      price: data.price,
+      eps: data.eps,
       epsHistory: data.epsHistory.map(h => h.value),
+      bvps: data.bvps,
+      der: data.der,
+      roe: data.roe,
+      dividend: data.dividend,
       epsHistorySource,
     };
     
@@ -340,7 +345,17 @@ export default function Analyze() {
     setTicker(displayTicker);
     setAnalyzedAt(new Date());
 
-    const persisted = { ...input, exchange: selectedExchange };
+    const persisted = {
+      ticker: displayTicker,
+      price: data.price,
+      eps: data.eps,
+      epsHistory: data.epsHistory.map(h => h.value),
+      bvps: data.bvps,
+      der: data.der,
+      roe: data.roe,
+      dividend: data.dividend,
+      exchange: selectedExchange,
+    };
 
     // Save to local storage
     localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted));
@@ -362,8 +377,14 @@ export default function Analyze() {
   const handleShare = () => {
     const data = form.getValues();
     const input = {
-      ...data,
+      ticker: data.ticker,
+      price: data.price,
+      eps: data.eps,
       epsHistory: data.epsHistory.map(h => h.value),
+      bvps: data.bvps,
+      der: data.der,
+      roe: data.roe,
+      dividend: data.dividend,
       exchange: selectedExchange,
     };
     const encoded = btoa(JSON.stringify(input));
@@ -456,6 +477,7 @@ export default function Analyze() {
                     form.reset(mapped);
                     setResult(calculateAnalysis(r.input));
                     setTicker(r.input.ticker?.toUpperCase() || "Stock");
+                    setSelectedExchange((r.input as any).exchange ?? ".JK");
                   }}
                 >
                   {r.ticker}
@@ -507,39 +529,27 @@ export default function Analyze() {
                         </FormItem>
                       )}
                     />
-                    <FormField
-                      control={form.control}
-                      name="exchange"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Exchange</FormLabel>
-                          <Select
-                            onValueChange={(val) => {
-                              field.onChange(val);
-                              setSelectedExchange(val);
-                            }}
-                            value={field.value || selectedExchange}
-                          >
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select exchange" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {EXCHANGES.map((ex) => (
-                                <SelectItem key={ex.suffix} value={ex.suffix}>
-                                  {ex.country} ({ex.exchange})
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormDescription className="text-[10px]">
-                            {EXCHANGES.find(e => e.suffix === (field.value || selectedExchange))?.examples || ""}
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                    <div>
+                      <label className="text-sm font-medium leading-none">Exchange</label>
+                      <Select
+                        onValueChange={setSelectedExchange}
+                        value={selectedExchange}
+                      >
+                        <SelectTrigger className="mt-1.5">
+                          <SelectValue placeholder="Select exchange" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {EXCHANGES.map((ex) => (
+                            <SelectItem key={ex.suffix} value={ex.suffix}>
+                              {ex.flag} {ex.country} ({ex.exchange})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        {EXCHANGES.find(e => e.suffix === selectedExchange)?.examples || ""}
+                      </p>
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
