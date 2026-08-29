@@ -61,6 +61,7 @@ type FormValues = z.infer<typeof formSchema>;
 
 const STORAGE_KEY = "stockanalyzer:last";
 const RECENT_KEY = "stockanalyzer:recent";
+const STORAGE_VERSION = 2;
 
 export default function Analyze() {
   const { toast } = useToast();
@@ -262,6 +263,11 @@ export default function Analyze() {
     if (dataParam) {
       try {
         const decoded = JSON.parse(atob(dataParam));
+        // Migrate old 'period' field to 'exchange'
+        if (decoded.period && !decoded.exchange) {
+          decoded.exchange = ".JK";
+          delete decoded.period;
+        }
         const mapped = {
           ...decoded,
           epsHistory: decoded.epsHistory.map((v: number) => ({ value: v }))
@@ -287,6 +293,12 @@ export default function Analyze() {
       if (last) {
         try {
           const parsed = JSON.parse(last);
+          // Migrate old 'period' field to 'exchange'
+          if (parsed.period && !parsed.exchange) {
+            parsed.exchange = ".JK";
+            delete parsed.period;
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+          }
           const mapped = {
             ...parsed,
             epsHistory: parsed.epsHistory.map((v: number) => ({ value: v }))
