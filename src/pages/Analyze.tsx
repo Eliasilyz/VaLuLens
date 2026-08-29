@@ -387,8 +387,8 @@ export default function Analyze() {
     <div className="container mx-auto px-4 py-8 max-w-7xl">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
         <div>
-          <h1 className="text-3xl font-bold font-mono">Analyzer</h1>
-          <p className="text-muted-foreground mt-1">Input fundamental data to estimate intrinsic value.</p>
+          <h1 className="font-serif text-3xl md:text-4xl italic tracking-tight">Analyzer</h1>
+          <p className="text-muted-foreground mt-1 text-sm">Fetch or enter financial data to estimate intrinsic value.</p>
         </div>
         
         {recentAnalyses.length > 0 && (
@@ -757,166 +757,148 @@ export default function Analyze() {
         {/* Results Column */}
         <div className="lg:col-span-8 space-y-6" aria-live="polite">
           {!result ? (
-            <Card className="border-border/50 shadow-sm h-full min-h-[400px] flex items-center justify-center bg-muted/10">
+            <Card className="border-border/60 shadow-sm h-full min-h-[400px] flex items-center justify-center bg-muted/20">
               <div className="text-center text-muted-foreground p-8">
-                <Calculator className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                <h3 className="text-lg font-medium mb-1">Awaiting Inputs</h3>
-                <p className="text-sm">Enter financial data on the left to view the analysis.</p>
+                <div className="w-16 h-16 mx-auto mb-5 rounded-full border-2 border-dashed border-border/60 flex items-center justify-center">
+                  <Calculator className="w-6 h-6 opacity-30" />
+                </div>
+                <h3 className="font-serif text-lg italic mb-1">Awaiting input</h3>
+                <p className="text-sm max-w-xs mx-auto">Enter a stock ticker and fetch data, or fill in the fields manually to see the analysis.</p>
               </div>
             </Card>
           ) : (
             <>
               {/* Report Card (for export) */}
-              <Card className="border-border/50 shadow-sm overflow-hidden" ref={reportCardRef}>
+              <Card className="border-border/60 shadow-sm overflow-hidden" ref={reportCardRef}>
                 <div className="bg-card p-6 md:p-8">
-                  <div className="flex flex-col md:flex-row justify-between items-start mb-8 gap-4">
+                  <div className="flex flex-col md:flex-row justify-between items-start mb-8 gap-6">
                     <div>
-                      <div className="flex items-center gap-3 mb-2">
-                        <h2 className="text-3xl font-bold font-mono tracking-tight">{ticker}</h2>
-                        <Badge variant="outline" className={`px-3 py-1 text-sm font-medium border ${getStatusColor(result.status)}`}>
+                      <div className="flex items-center gap-3 mb-3">
+                        <h2 className="font-serif text-3xl md:text-4xl italic tracking-tight">{ticker}</h2>
+                        <Badge variant="outline" className={`px-2.5 py-0.5 text-xs font-medium border ${getStatusColor(result.status)}`}>
                           {result.status}
                         </Badge>
                       </div>
-                      <div className="text-2xl font-light text-muted-foreground">
+                      <div className="font-mono text-2xl text-muted-foreground">
                         {formatCurrency(form.getValues().price)}
                       </div>
                     </div>
                     
-                    <div className="text-left md:text-right">
-                      <div className="text-sm text-muted-foreground font-medium mb-1 uppercase tracking-wider">Intrinsic Value</div>
-                      <div className="text-4xl font-bold text-primary mb-1">
-                        {formatCurrency(result.fairValue)}
-                      </div>
-                      <div className={`text-sm font-medium flex items-center md:justify-end gap-1 ${
-                        result.marginOfSafety !== null && result.marginOfSafety > 0 ? "text-emerald-500" : "text-destructive"
-                      }`}>
-                        {result.marginOfSafety !== null ? (
-                          <>
-                            {result.marginOfSafety > 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                            {formatPercent(result.marginOfSafety)} MoS
-                          </>
-                        ) : "MoS N/A"}
+                    {/* Lens — the signature element */}
+                    <div className="relative">
+                      <div className="w-40 h-40 md:w-48 md:h-48 rounded-full border-2 border-primary/15 flex flex-col items-center justify-center bg-primary/[0.03]">
+                        <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">Intrinsic Value</div>
+                        <div className="font-serif text-3xl md:text-4xl italic text-primary leading-none">
+                          {formatCurrency(result.fairValue)}
+                        </div>
+                        <div className={`text-xs font-medium mt-1.5 ${
+                          result.marginOfSafety !== null && result.marginOfSafety > 0 ? "text-emerald-600" : "text-destructive"
+                        }`}>
+                          {result.marginOfSafety !== null ? (
+                            <>
+                              {result.marginOfSafety > 0 ? "↑" : "↓"} {formatPercent(result.marginOfSafety)} MoS
+                            </>
+                          ) : "MoS N/A"}
+                        </div>
                       </div>
                       {result.mlGrowthRate !== null && (
-                        <div className="mt-2 pt-2 border-t border-border/30">
-                          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5 flex items-center gap-1 justify-end">
-                            <Brain className="w-3 h-3" /> ML Predicted
-                          </div>
-                          <div className="text-lg font-bold text-violet-500">
-                            {formatCurrency(result.fairValueML)}
-                          </div>
-                          <div className={`text-xs font-medium flex items-center md:justify-end gap-1 ${
-                            result.marginOfSafetyML !== null && result.marginOfSafetyML > 0 ? "text-emerald-500" : "text-destructive"
-                          }`}>
-                            {result.marginOfSafetyML !== null ? (
-                              <>
-                                {result.marginOfSafetyML > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                                {formatPercent(result.marginOfSafetyML)} MoS
-                              </>
-                            ) : "MoS N/A"}
+                        <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-card border border-border/60 rounded-full px-3 py-1 shadow-sm">
+                          <div className="flex items-center gap-1.5">
+                            <Brain className="w-3 h-3 text-primary" />
+                            <span className="font-mono text-xs font-medium">{formatCurrency(result.fairValueML)}</span>
                           </div>
                         </div>
                       )}
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                    <div className="bg-muted/30 p-4 rounded-lg border border-border/50">
-                      <div className="text-xs text-muted-foreground mb-1 uppercase tracking-wide">DCF Value</div>
-                      <div className="text-xl font-semibold font-mono">{formatCurrency(result.dcfValue)}</div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border/40 rounded-lg overflow-hidden mb-8">
+                    <div className="bg-card p-4">
+                      <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">DCF Value</div>
+                      <div className="font-mono text-lg">{formatCurrency(result.dcfValue)}</div>
                       {result.mlGrowthRate !== null && (
-                        <div className="text-[10px] text-violet-500 font-mono mt-1">
+                        <div className="text-[10px] text-primary font-mono mt-1">
                           ML: {formatCurrency(result.dcfValueML)}
                         </div>
                       )}
                     </div>
-                    <div className="bg-muted/30 p-4 rounded-lg border border-border/50">
-                      <div className="text-xs text-muted-foreground mb-1 uppercase tracking-wide">Graham No.</div>
-                      <div className="text-xl font-semibold font-mono">{formatCurrency(result.grahamNumber)}</div>
+                    <div className="bg-card p-4">
+                      <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">Graham No.</div>
+                      <div className="font-mono text-lg">{formatCurrency(result.grahamNumber)}</div>
                     </div>
-                    <div className="bg-muted/30 p-4 rounded-lg border border-border/50">
-                      <div className="text-xs text-muted-foreground mb-1 uppercase tracking-wide">P/E Band</div>
-                      <div className="text-xl font-semibold font-mono">{formatCurrency(result.peBandValue)}</div>
+                    <div className="bg-card p-4">
+                      <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">P/E Band</div>
+                      <div className="font-mono text-lg">{formatCurrency(result.peBandValue)}</div>
                     </div>
-                    <div className="bg-muted/30 p-4 rounded-lg border border-border/50 flex flex-col justify-between">
-                      <div className="text-xs text-muted-foreground mb-1 uppercase tracking-wide">Financial Score</div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-xl font-semibold font-mono">{result.financialScore}/100</div>
-                        <Progress value={result.financialScore} className="h-2 flex-1" />
+                    <div className="bg-card p-4">
+                      <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">Financial Score</div>
+                      <div className="flex items-center gap-2.5">
+                        <div className="font-mono text-lg">{result.financialScore}<span className="text-xs text-muted-foreground">/100</span></div>
+                        <Progress value={result.financialScore} className="h-1.5 flex-1" />
                       </div>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div>
-                      <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-4 border-b border-border/50 pb-2">Key Metrics</h3>
-                      <div className="space-y-3">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm font-medium">P/E Ratio</span>
-                          <span className="font-mono">{formatNumber(result.per)}</span>
+                      <h3 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-4">Key Metrics</h3>
+                      <div className="space-y-0 divide-y divide-border/40">
+                        <div className="flex justify-between items-center py-2.5">
+                          <span className="text-sm">P/E Ratio</span>
+                          <span className="font-mono text-sm">{formatNumber(result.per)}</span>
                         </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm font-medium">P/B Ratio</span>
-                          <span className="font-mono">{formatNumber(result.pbv)}</span>
+                        <div className="flex justify-between items-center py-2.5">
+                          <span className="text-sm">P/B Ratio</span>
+                          <span className="font-mono text-sm">{formatNumber(result.pbv)}</span>
                         </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm font-medium">Div Yield</span>
-                          <span className="font-mono">{formatPercent(result.dividendYield)}</span>
+                        <div className="flex justify-between items-center py-2.5">
+                          <span className="text-sm">Dividend Yield</span>
+                          <span className="font-mono text-sm">{formatPercent(result.dividendYield)}</span>
                         </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm font-medium">EPS Growth (CAGR)</span>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono">{formatPercent(result.epsCagr !== null ? result.epsCagr * 100 : null)}</span>
-                            {result.epsGrowthTrend === "Increasing" && <TrendingUp className="w-3 h-3 text-emerald-500" />}
+                        <div className="flex justify-between items-center py-2.5">
+                          <span className="text-sm">EPS Growth (CAGR)</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-sm">{formatPercent(result.epsCagr !== null ? result.epsCagr * 100 : null)}</span>
+                            {result.epsGrowthTrend === "Increasing" && <TrendingUp className="w-3 h-3 text-emerald-600" />}
                             {result.epsGrowthTrend === "Declining" && <TrendingDown className="w-3 h-3 text-destructive" />}
-                            {result.epsGrowthTrend === "Stable" && <Minus className="w-3 h-3 text-blue-500" />}
+                            {result.epsGrowthTrend === "Stable" && <Minus className="w-3 h-3 text-muted-foreground" />}
                           </div>
                         </div>
                       </div>
                     </div>
 
                     <div>
-                      <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-4 border-b border-border/50 pb-2">Health Checklist</h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="flex items-center gap-2 text-sm">
-                          {result.checklist.roeHigh ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <XCircle className="w-4 h-4 text-muted-foreground/50" />}
-                          <span className={result.checklist.roeHigh ? "" : "text-muted-foreground"}>ROE &gt; 15%</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm">
-                          {result.checklist.derLow ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <XCircle className="w-4 h-4 text-muted-foreground/50" />}
-                          <span className={result.checklist.derLow ? "" : "text-muted-foreground"}>D/E &lt; 1</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm">
-                          {result.checklist.epsPositive ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <AlertCircle className="w-4 h-4 text-destructive" />}
-                          <span className={result.checklist.epsPositive ? "" : "text-destructive font-medium"}>Positive EPS</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm">
-                          {result.checklist.growthPositive ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <XCircle className="w-4 h-4 text-muted-foreground/50" />}
-                          <span className={result.checklist.growthPositive ? "" : "text-muted-foreground"}>Positive Growth</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm">
-                          {result.checklist.pbvLow ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <XCircle className="w-4 h-4 text-muted-foreground/50" />}
-                          <span className={result.checklist.pbvLow ? "" : "text-muted-foreground"}>P/B &lt; 3</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm">
-                          {result.checklist.perLow ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <XCircle className="w-4 h-4 text-muted-foreground/50" />}
-                          <span className={result.checklist.perLow ? "" : "text-muted-foreground"}>P/E &lt; 15</span>
-                        </div>
+                      <h3 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-4">Health Checklist</h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {[
+                          { pass: result.checklist.roeHigh, label: "ROE > 15%" },
+                          { pass: result.checklist.derLow, label: "D/E < 1" },
+                          { pass: result.checklist.epsPositive, label: "Positive EPS", critical: true },
+                          { pass: result.checklist.growthPositive, label: "Positive Growth" },
+                          { pass: result.checklist.pbvLow, label: "P/B < 3" },
+                          { pass: result.checklist.perLow, label: "P/E < 15" },
+                        ].map(({ pass, label, critical }) => (
+                          <div key={label} className="flex items-center gap-2 text-sm">
+                            {pass ? (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            ) : critical ? (
+                              <AlertCircle className="w-3.5 h-3.5 text-destructive shrink-0" />
+                            ) : (
+                              <XCircle className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
+                            )}
+                            <span className={pass ? "" : critical ? "text-destructive" : "text-muted-foreground"}>{label}</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </div>
                 </div>
-                <div className="border-t border-border/50 bg-muted/20 px-6 md:px-8 py-3 grid grid-cols-3 items-center text-xs text-muted-foreground gap-2">
-                  <span className="font-mono tracking-tight justify-self-start">ValuLens</span>
-                  <span className="justify-self-center text-center">
-                    Analyzed on: {(analyzedAt ?? new Date()).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
+                <div className="border-t border-border/60 bg-muted/30 px-6 md:px-8 py-3 flex flex-col sm:flex-row justify-between items-center text-xs text-muted-foreground gap-2">
+                  <span className="font-serif italic">ValuLens</span>
+                  <span className="text-center">
+                    Analyzed {(analyzedAt ?? new Date()).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })} · {analyzedPeriod || "—"}
                   </span>
-                  <span className="justify-self-end text-right">
-                    Data Period: {analyzedPeriod || "—"}
-                  </span>
-                </div>
-                <div className="bg-muted/10 px-6 md:px-8 py-2 text-[10px] text-muted-foreground/70 text-center border-t border-border/30">
-                  funda.farelhanafi.my.id
+                  <span className="font-mono text-[10px] text-muted-foreground/50">funda.farelhanafi.my.id</span>
                 </div>
               </Card>
 

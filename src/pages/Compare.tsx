@@ -227,8 +227,8 @@ export default function Compare() {
     <div className="container mx-auto px-4 py-8 max-w-5xl">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
         <div>
-          <h1 className="text-3xl font-bold font-mono">Compare Stocks</h1>
-          <p className="text-muted-foreground mt-1">Side-by-side fundamental analysis.</p>
+          <h1 className="font-serif text-3xl md:text-4xl italic tracking-tight">Compare</h1>
+          <p className="text-muted-foreground mt-1 text-sm">Side-by-side fundamental analysis.</p>
         </div>
         {hasCompared && (
           <Button variant="outline" onClick={handleShare}>

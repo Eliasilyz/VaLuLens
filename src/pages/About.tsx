@@ -8,7 +8,7 @@ export default function About() {
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-4xl">
-      <h1 className="text-4xl font-bold font-mono mb-6">Methodology & Disclaimers</h1>
+      <h1 className="font-serif text-4xl md:text-5xl italic tracking-tight mb-6">Methodology</h1>
       
       <div className="prose prose-slate dark:prose-invert max-w-none">
         <p className="text-lg text-muted-foreground mb-8 leading-relaxed">
