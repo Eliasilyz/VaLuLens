@@ -1,4 +1,5 @@
-import yahooFinance from "yahoo-finance2";
+import YahooFinance from "yahoo-finance2";
+const yahooFinance = new YahooFinance();
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
