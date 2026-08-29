@@ -52,7 +52,7 @@ function buildModel(): tf.LayersModel {
 
   model.add(tf.layers.lstm({
     units: 32,
-    inputShape: [1, SEQUENCE_LENGTH],
+    inputShape: [SEQUENCE_LENGTH, 1],
     returnSequences: false,
   }));
 
@@ -91,9 +91,9 @@ function prepareTrainingData(stocks: TrainingStock[]): {
     }
   }
 
-  const featuresTensor = tf.tensor4d(
+  const featuresTensor = tf.tensor3d(
     flatData,
-    [xs.length, 1, SEQUENCE_LENGTH, 1]
+    [xs.length, SEQUENCE_LENGTH, 1]
   );
 
   const labelsTensor = tf.tensor2d(ys, [ys.length, 1]);
@@ -158,9 +158,9 @@ export function predictEPSGrowth(
   const { normalized, min, max } = normalize(epsHistory);
   const sequence = normalized.slice(-SEQUENCE_LENGTH);
 
-  const inputTensor = tf.tensor4d(
+  const inputTensor = tf.tensor3d(
     sequence,
-    [1, 1, SEQUENCE_LENGTH, 1]
+    [1, SEQUENCE_LENGTH, 1]
   );
 
   const prediction = model.predict(inputTensor) as tf.Tensor;
