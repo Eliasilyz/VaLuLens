@@ -90,7 +90,7 @@ export default function Analyze() {
 
   // Check for saved model on mount
   useEffect(() => {
-    setModelReady(hasSavedModel());
+    hasSavedModel().then(setModelReady);
   }, []);
 
   const handleFetchStock = async () => {

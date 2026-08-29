@@ -14,7 +14,7 @@ export interface MLPrediction {
 }
 
 const SEQUENCE_LENGTH = 3;
-const MODEL_KEY = "valulens:ml-model";
+const MODEL_ID = "valulens-ml-model";
 
 function normalize(values: number[]): { normalized: number[]; min: number; max: number } {
   const min = Math.min(...values);
@@ -72,16 +72,12 @@ function buildModel(): tf.LayersModel {
 }
 
 function prepareTrainingData(stocks: TrainingStock[]): {
-  features: tf.Tensor4D;
+  features: tf.Tensor3D;
   labels: tf.Tensor2D;
-  normalizationParams: { min: number; max: number }[];
 } {
   const allHistories = stocks.map((s) => s.epsHistory);
   const { xs, ys } = createSequences(allHistories);
 
-  const normalizationParams = allHistories.map((h) => normalize(h));
-
-  // Flatten xs to a flat number array for tensor4d
   const flatData: number[] = [];
   for (const x of xs) {
     for (const seq of x) {
@@ -91,14 +87,10 @@ function prepareTrainingData(stocks: TrainingStock[]): {
     }
   }
 
-  const featuresTensor = tf.tensor3d(
-    flatData,
-    [xs.length, SEQUENCE_LENGTH, 1]
-  );
-
+  const featuresTensor = tf.tensor3d(flatData, [xs.length, SEQUENCE_LENGTH, 1]);
   const labelsTensor = tf.tensor2d(ys, [ys.length, 1]);
 
-  return { features: featuresTensor, labels: labelsTensor, normalizationParams };
+  return { features: featuresTensor, labels: labelsTensor };
 }
 
 export async function trainModel(
@@ -121,10 +113,23 @@ export async function trainModel(
     },
   });
 
-  // Save model to localStorage
-  await model.save(`localstorage://${MODEL_KEY}`);
+  // Save to IndexedDB — persistent, large capacity, survives reload
+  await tf.io.withSaveHandler(async (artifacts) => {
+    const db = await openDB();
+    const tx = db.transaction("models", "readwrite");
+    await tx.store.put({
+      id: MODEL_ID,
+      modelArtifacts: {
+        modelTopology: artifacts.modelTopology,
+        weightData: artifacts.weightData,
+        weightSpecs: artifacts.weightSpecs,
+      },
+    });
+    await tx.done;
+    db.close();
+    return { modelArtifactsInfo: { dateSaved: new Date(), modelTopologyType: "JSON" } };
+  });
 
-  // Cleanup tensors
   features.dispose();
   labels.dispose();
 
@@ -133,12 +138,24 @@ export async function trainModel(
 
 export async function loadModel(): Promise<tf.LayersModel | null> {
   try {
-    const model = await tf.loadLayersModel(`localstorage://${MODEL_KEY}`);
+    const db = await openDB();
+    const tx = db.transaction("models", "readonly");
+    const record = await tx.store.get(MODEL_ID);
+    db.close();
+
+    if (!record?.modelArtifacts) return null;
+
+    const { modelTopology, weightData, weightSpecs } = record.modelArtifacts;
+    const model = await tf.loadLayersModel(
+      tf.io.fromMemory({ modelTopology, weightData, weightSpecs })
+    );
+
     model.compile({
       optimizer: tf.train.adam(0.01),
       loss: "meanSquaredError",
       metrics: ["mae"],
     });
+
     return model;
   } catch {
     return null;
@@ -158,10 +175,7 @@ export function predictEPSGrowth(
   const { normalized, min, max } = normalize(epsHistory);
   const sequence = normalized.slice(-SEQUENCE_LENGTH);
 
-  const inputTensor = tf.tensor3d(
-    sequence,
-    [1, SEQUENCE_LENGTH, 1]
-  );
+  const inputTensor = tf.tensor3d(sequence, [1, SEQUENCE_LENGTH, 1]);
 
   const prediction = model.predict(inputTensor) as tf.Tensor;
   const predictedValue = prediction.dataSync()[0];
@@ -169,17 +183,14 @@ export function predictEPSGrowth(
   inputTensor.dispose();
   prediction.dispose();
 
-  // Denormalize
   const range = max - min || 1;
   const nextYearEPS = predictedValue * range + min;
 
-  // Calculate growth rate
   const currentEPS = epsHistory[epsHistory.length - 1];
   const predictedGrowthRate = currentEPS > 0
     ? (nextYearEPS - currentEPS) / currentEPS
     : 0;
 
-  // Simple confidence based on historical volatility
   const growthRates: number[] = [];
   for (let i = 1; i < epsHistory.length; i++) {
     if (epsHistory[i - 1] > 0) {
@@ -191,7 +202,6 @@ export function predictEPSGrowth(
     : 0.5;
   const confidence = Math.max(0, Math.min(1, 1 - avgVolatility));
 
-  // Cap growth rate at reasonable bounds
   const cappedGrowthRate = Math.max(-0.30, Math.min(0.30, predictedGrowthRate));
 
   return {
@@ -201,6 +211,29 @@ export function predictEPSGrowth(
   };
 }
 
-export function hasSavedModel(): boolean {
-  return localStorage.getItem(MODEL_KEY) !== null;
+export async function hasSavedModel(): Promise<boolean> {
+  try {
+    const db = await openDB();
+    const tx = db.transaction("models", "readonly");
+    const record = await tx.store.get(MODEL_ID);
+    db.close();
+    return !!record?.modelArtifacts;
+  } catch {
+    return false;
+  }
+}
+
+// IndexedDB helpers
+function openDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open("ValuLensML", 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains("models")) {
+        db.createObjectStore("models", { keyPath: "id" });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
 }
